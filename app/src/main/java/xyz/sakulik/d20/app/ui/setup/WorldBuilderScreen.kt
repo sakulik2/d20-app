@@ -40,7 +40,7 @@ fun WorldBuilderScreen(
         viewModel.uiEvent.collect { event: WorldBuilderUiEvent ->
             when (event) {
                 is WorldBuilderUiEvent.NavigateToCreation -> {
-                    onNavigateToCreation(uiState.campaignId, uiState.rulesetId)
+                    onNavigateToCreation(event.campaignId, event.rulesetId)
                 }
                 is WorldBuilderUiEvent.Error -> {
                     snackbarHostState.showSnackbar(event.message)
@@ -100,6 +100,14 @@ fun WorldBuilderScreen(
                     item {
                         ExploreCloudCard(onClick = onNavigateToMarket)
                     }
+                }
+                if (uiState.presets.isEmpty() && !uiState.isLoading) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "当前规则包没有内置设定模板，可自行填写或进入设定市场。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -171,7 +179,10 @@ fun WorldBuilderScreen(
                 onClick = { viewModel.confirmAndContinue() },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(16.dp),
-                enabled = !uiState.isLoading && uiState.worldName.isNotBlank()
+                enabled = !uiState.isLoading &&
+                    !uiState.isPolishing &&
+                    uiState.worldName.isNotBlank() &&
+                    uiState.coreSetting.isNotBlank()
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)

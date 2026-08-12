@@ -55,10 +55,21 @@ class ContextAssembler(
         val lorebookContext = if (loreEntryDao != null) {
             val enabledEntries = loreEntryDao.getEnabledEntriesByCampaign(campaignId)
             if (enabledEntries.isNotEmpty()) {
-                val fullScanText = userText + " " + history.joinToString(" ") { it.content }
+                val retrievalText = buildString {
+                    append(userText)
+                    history.takeLast(LORE_HISTORY_LIMIT).forEach { message ->
+                        append(' ')
+                        append(message.content)
+                    }
+                }.lowercase()
                 val matched = enabledEntries.filter { entry: LoreEntryEntity ->
-                    val kwList = entry.keywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                    kwList.any { kw: String -> fullScanText.contains(kw as CharSequence, ignoreCase = true) } || fullScanText.contains(entry.title as CharSequence, ignoreCase = true)
+                    val keywords = entry.keywords
+                        .split(LORE_KEYWORD_SEPARATOR)
+                        .map(String::trim)
+                        .filter(String::isNotEmpty)
+                    val normalizedTitle = entry.title.trim().lowercase()
+                    keywords.any { keyword -> keyword.lowercase() in retrievalText } ||
+                        normalizedTitle.isNotEmpty() && normalizedTitle in retrievalText
                 }.take(5)
 
                 if (matched.isNotEmpty()) {
@@ -73,6 +84,12 @@ class ContextAssembler(
         val worldview = campaign.worldviewId?.let { wvId ->
             val repo = PluginRepository(context)
             WorldviewProvider.loadManifest(repo, wvId)
+                ?.takeIf { preset ->
+                    "any" in preset.compatibleRulesets ||
+                        ruleset.id in preset.compatibleRulesets ||
+                        campaign.systemId in preset.compatibleRulesets
+                }
+                ?: ruleset.worldviewPresets.firstOrNull { preset -> preset.id == wvId }
         }
 
         val worldSetting = """
@@ -164,5 +181,10 @@ class ContextAssembler(
         messages.add(ChatMessage(role = "user", content = textWithGuard))
 
         return messages
+    }
+
+    private companion object {
+        const val LORE_HISTORY_LIMIT = 4
+        val LORE_KEYWORD_SEPARATOR = Regex("[,，;；\\n\\r]+")
     }
 }
