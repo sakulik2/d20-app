@@ -74,23 +74,45 @@ data class AnthropicRequest(
     val messages: List<ChatMessage>,
     val system: String? = null,
     @SerialName("max_tokens")
-    val maxTokens: Int = 4096,
-    val stream: Boolean = true,
-    val temperature: Double? = null
+    val maxTokens: Int,
+    val stream: Boolean,
+    val temperature: Double? = null,
+    @SerialName("output_config")
+    val outputConfig: AnthropicOutputConfig? = null
+)
+
+@Serializable
+data class AnthropicOutputConfig(
+    val format: AnthropicOutputFormat
+)
+
+@Serializable
+data class AnthropicOutputFormat(
+    val type: String,
+    val schema: JsonObject
 )
 
 @Serializable
 data class AnthropicChunk(
     val type: String? = null,
-    val delta: AnthropicDelta? = null
+    val delta: AnthropicDelta? = null,
+    val error: AnthropicError? = null
 )
 
 @Serializable
 data class AnthropicDelta(
     val type: String? = null,
     val text: String? = null,
+    @SerialName("partial_json")
+    val partialJson: String? = null,
     @SerialName("stop_reason")
     val stopReason: String? = null
+)
+
+@Serializable
+data class AnthropicError(
+    val type: String? = null,
+    val message: String? = null
 )
 
 /**
@@ -100,7 +122,7 @@ data class AnthropicDelta(
 data class ResponsesRequest(
     val model: String,
     val input: List<ChatMessage>,
-    val stream: Boolean = true,
+    val stream: Boolean,
     val temperature: Double? = null,
     val text: ResponsesTextConfig? = null,
     @SerialName("max_output_tokens")

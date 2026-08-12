@@ -108,17 +108,18 @@ class LlmRepositoryImpl(
         messages: List<ChatMessage>,
         protocol: ApiProtocol,
         stream: Boolean,
-        structuredOutputMode: StructuredOutputMode = StructuredOutputMode.NONE
+        structuredOutputMode: StructuredOutputMode = StructuredOutputMode.NONE,
+        outputSpec: StructuredOutputSpec = TURN_OUTPUT_SPEC
     ): Request {
         return when (protocol) {
             ApiProtocol.ANTHROPIC -> buildAnthropicRequest(
-                baseUrl, apiKey, model, messages, stream
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
             )
             ApiProtocol.RESPONSES -> buildResponsesRequest(
-                baseUrl, apiKey, model, messages, stream, structuredOutputMode
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
             )
             else -> buildChatCompletionsRequest(
-                baseUrl, apiKey, model, messages, stream, structuredOutputMode
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
             )
         }
     }
@@ -128,7 +129,7 @@ class LlmRepositoryImpl(
         protocol: ApiProtocol,
         model: String
     ): StructuredOutputMode = when {
-        protocol == ApiProtocol.ANTHROPIC -> StructuredOutputMode.NONE
+        protocol == ApiProtocol.ANTHROPIC -> StructuredOutputMode.JSON_SCHEMA
         protocol == ApiProtocol.CHAT_COMPLETIONS && isDeepSeek(baseUrl, model) ->
             StructuredOutputMode.JSON_OBJECT
         else -> StructuredOutputMode.JSON_SCHEMA
@@ -283,15 +284,16 @@ class LlmRepositoryImpl(
         model: String,
         messages: List<ChatMessage>,
         stream: Boolean,
-        structuredOutputMode: StructuredOutputMode
+        structuredOutputMode: StructuredOutputMode,
+        outputSpec: StructuredOutputSpec
     ): Request {
         val responseFormat = when (structuredOutputMode) {
             StructuredOutputMode.JSON_SCHEMA -> ResponseFormat(
                 type = "json_schema",
                 jsonSchema = JsonSchemaFormat(
-                    name = "trpg_turn_response",
+                    name = outputSpec.name,
                     strict = true,
-                    schema = AiResponseSchema.value
+                    schema = outputSpec.schema
                 )
             )
             StructuredOutputMode.JSON_OBJECT -> ResponseFormat(type = "json_object")
@@ -335,17 +337,20 @@ class LlmRepositoryImpl(
         apiKey: String,
         model: String,
         messages: List<ChatMessage>,
-        stream: Boolean
+        stream: Boolean,
+        structuredOutputMode: StructuredOutputMode,
+        outputSpec: StructuredOutputSpec
     ): Request {
-        val systemPrompt = messages.filter { it.role == "system" }.joinToString("\n\n") { it.content }
-        val userAssistantMessages = messages.filter { it.role != "system" }
-        
-        val requestBody = AnthropicRequest(
+        val outputFormat = if (structuredOutputMode == StructuredOutputMode.JSON_SCHEMA) {
+            AnthropicOutputFormat(type = "json_schema", schema = outputSpec.schema)
+        } else {
+            null
+        }
+        val requestBody = AnthropicMessagesAdapter.createRequestBody(
             model = model,
-            messages = userAssistantMessages,
-            system = systemPrompt.ifBlank { null },
-            maxTokens = 4096,
-            stream = stream
+            messages = messages,
+            stream = stream,
+            outputFormat = outputFormat
         )
         return Request.Builder()
             .url(buildEndpoint(baseUrl, "v1/messages"))
@@ -363,7 +368,8 @@ class LlmRepositoryImpl(
         model: String,
         messages: List<ChatMessage>,
         stream: Boolean,
-        structuredOutputMode: StructuredOutputMode
+        structuredOutputMode: StructuredOutputMode,
+        outputSpec: StructuredOutputSpec
     ): Request {
         val requestBody = ResponsesRequest(
             model = model,
@@ -373,9 +379,9 @@ class LlmRepositoryImpl(
                 ResponsesTextConfig(
                     format = ResponsesTextFormat(
                         type = "json_schema",
-                        name = "trpg_turn_response",
+                        name = outputSpec.name,
                         strict = true,
-                        schema = AiResponseSchema.value
+                        schema = outputSpec.schema
                     )
                 )
             } else {
@@ -401,15 +407,7 @@ class LlmRepositoryImpl(
         return try {
             when (protocol) {
                 ApiProtocol.ANTHROPIC -> {
-                    val chunk = json.decodeFromString<AnthropicChunk>(data)
-                    val failure = chunk.delta?.stopReason
-                        ?.takeUnless { it in ANTHROPIC_SUCCESS_STOP_REASONS }
-                        ?.let { "Anthropic 响应未正常结束：$it" }
-                    ParsedStreamChunk(
-                        delta = chunk.delta?.text.orEmpty(),
-                        completed = chunk.type == "message_stop",
-                        failure = failure
-                    )
+                    AnthropicMessagesAdapter.parseStreamData(data, json)
                 }
                 ApiProtocol.RESPONSES -> {
                     val chunk = json.decodeFromString<ResponsesChunk>(data)
@@ -598,12 +596,10 @@ class LlmRepositoryImpl(
         fun execute(
             protocol: ApiProtocol,
             structuredOutputMode: StructuredOutputMode = if (
+                protocol == ApiProtocol.ANTHROPIC
+            ) StructuredOutputMode.JSON_SCHEMA else if (
                 protocol == ApiProtocol.CHAT_COMPLETIONS
-            ) {
-                StructuredOutputMode.JSON_OBJECT
-            } else {
-                StructuredOutputMode.NONE
-            },
+            ) StructuredOutputMode.JSON_OBJECT else StructuredOutputMode.NONE,
             formatRetryCount: Int = 0
         ) {
             val requestMessages = if (formatRetryCount == 0) {
@@ -622,7 +618,8 @@ class LlmRepositoryImpl(
                     requestMessages,
                     protocol,
                     stream = false,
-                    structuredOutputMode = structuredOutputMode
+                    structuredOutputMode = structuredOutputMode,
+                    outputSpec = CHARACTER_OUTPUT_SPEC
                 )
             } catch (exception: Exception) {
                 trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(exception))
@@ -689,12 +686,6 @@ class LlmRepositoryImpl(
         awaitClose { activeCall?.cancel() }
     }.flowOn(Dispatchers.IO)
 
-    private data class ParsedStreamChunk(
-        val delta: String = "",
-        val completed: Boolean = false,
-        val failure: String? = null
-    )
-
     private enum class StructuredOutputMode {
         JSON_SCHEMA,
         JSON_OBJECT,
@@ -707,10 +698,64 @@ class LlmRepositoryImpl(
         }
     }
 
+    private data class StructuredOutputSpec(
+        val name: String,
+        val schema: JsonObject
+    )
+
     private companion object {
+        val TURN_OUTPUT_SPEC = StructuredOutputSpec("trpg_turn_response", AiResponseSchema.value)
+        val CHARACTER_OUTPUT_SPEC = StructuredOutputSpec(
+            "trpg_character_response",
+            CharacterGenResponseSchema.value
+        )
         val STRUCTURED_OUTPUT_FALLBACK_CODES = setOf(400, 404, 405, 415, 422)
         val CHAT_SUCCESS_FINISH_REASONS = setOf("stop")
-        val ANTHROPIC_SUCCESS_STOP_REASONS = setOf("end_turn", "stop_sequence", "tool_use")
         val RESPONSES_FAILURE_EVENTS = setOf("response.incomplete", "response.failed", "error")
     }
+}
+
+internal data class ParsedStreamChunk(
+    val delta: String = "",
+    val completed: Boolean = false,
+    val failure: String? = null
+)
+
+internal object AnthropicMessagesAdapter {
+    fun createRequestBody(
+        model: String,
+        messages: List<ChatMessage>,
+        stream: Boolean,
+        outputFormat: AnthropicOutputFormat?
+    ): AnthropicRequest {
+        val systemPrompt = messages.filter { it.role == "system" }
+            .joinToString("\n\n") { it.content }
+        val conversation = messages.filter { it.role == "user" || it.role == "assistant" }
+        require(conversation.isNotEmpty()) { "Anthropic Messages 请求至少需要一条用户或助手消息" }
+        return AnthropicRequest(
+            model = model,
+            messages = conversation,
+            system = systemPrompt.ifBlank { null },
+            maxTokens = 4096,
+            stream = stream,
+            outputConfig = outputFormat?.let(::AnthropicOutputConfig)
+        )
+    }
+
+    fun parseStreamData(data: String, json: Json): ParsedStreamChunk {
+        val chunk = json.decodeFromString<AnthropicChunk>(data)
+        val eventFailure = chunk.error?.let { error ->
+            "Anthropic ${error.type ?: "error"}：${error.message ?: "未知错误"}"
+        }
+        val stopFailure = chunk.delta?.stopReason
+            ?.takeUnless { it in SUCCESS_STOP_REASONS }
+            ?.let { "Anthropic 响应未正常结束：$it" }
+        return ParsedStreamChunk(
+            delta = chunk.delta?.text ?: chunk.delta?.partialJson.orEmpty(),
+            completed = chunk.type == "message_stop",
+            failure = eventFailure ?: stopFailure
+        )
+    }
+
+    private val SUCCESS_STOP_REASONS = setOf("end_turn", "stop_sequence", "tool_use")
 }
