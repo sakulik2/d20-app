@@ -272,11 +272,12 @@ class CombatStateManager {
                 combatant.copy(hp = nextHp)
             }
         }
-        val dueIds = dueEffects.map(OngoingEffect::id).toSet()
         val effects = state.ongoingEffects.mapNotNull { effect ->
-            if (effect.id !in dueIds) effect else effect.copy(
-                remainingTicks = effect.remainingTicks - 1
-            ).takeIf { it.remainingTicks > 0 }
+            when {
+                effect.targetId != participantId || effect.timing != timing -> effect
+                effect.remainingTicks == 1 -> null
+                else -> effect.copy(remainingTicks = effect.remainingTicks - 1)
+            }
         }
         state = state.copy(
             combatants = combatants,
