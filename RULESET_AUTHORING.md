@@ -35,16 +35,25 @@ app/src/main/assets/rulesets/my_system.json
     "equipmentBonusActionIds": ["my_check"],
     "defaultActionId": "my_check",
     "requiredTargetActionIds": ["my_check"],
+    "allowedDiceExpressions": { "my_check": ["1d20"] },
     "statAliases": { "agility": ["敏捷", "agility"] },
     "targetLabel": "难度"
   },
   "combatRules": {
+    "encounterProfiles": {
+      "adversary": {
+        "initiative": 10,
+        "ac": 10,
+        "hp": 5,
+        "maxHp": 5
+      }
+    },
     "lifePolicy": "NONE",
     "localActionHandler": "NONE",
     "defeatAtZeroHp": false
   },
   "systemPromptInjection": {
-    "prompt": "需要检定时返回 game_events 中的 require_roll，action_id 使用 my_check，并提供 expression、threshold、stat_id 和 reason。"
+    "prompt": "需要检定时返回 game_events 中的 require_roll，action_id 使用 my_check，并提供 expression、threshold、stat_id 和 reason。进入战斗时只返回 id、name 和 profile_id=adversary，不得提供规则数值。"
   },
   "characterTemplate": {
     "defaultStats": { "hp": "10", "max_hp": "10", "agility": "0" }
@@ -97,6 +106,7 @@ app/src/main/assets/rulesets/my_system.json
 - `modifierSource`: `EVENT`、`ABILITY_MODIFIER`、`NONE`。
 - `equipmentBonusAppliesTo`: `MODIFIER`、`TARGET`、`NONE`。
 - `equipmentBonusActionIds`: 允许使用通用装备整数加值的动作；建议显式填写。
+- `allowedDiceExpressions`: 按 `action_id` 声明 LLM 可请求的完整骰式白名单；必须包含 `defaultActionId`。仅接受至多 100 枚、至多 10000 面的简单骰式，以及可选的 `kh1`、`kl1` 和整数加减值，例如 `1d20`、`2d20kh1`、`1d100+10`。
 
 AST 节点类型为 `roll`、`switch`、`condition`、`math`、`effect`、`rest`、`consume_resource`、`death_save`、`targeted_attack`。数值来源使用 `constant:<值>`、`variable:<变量>`、`stat:<属性键>`、`intent:<参数>`。数学运算符为 `+ - * /`；条件支持数值 `>= > <= < == !=`，字符串只支持 `== !=`。流水线必须以明确的 `ResultState` 结束：`SUCCESS`、`FAILURE`、`CRITICAL_SUCCESS`、`CRITICAL_FAILURE`、`REGULAR_SUCCESS`、`HARD_SUCCESS` 或 `EXTREME_SUCCESS`。
 
@@ -105,6 +115,10 @@ AST 节点类型为 `roll`、`switch`、`condition`、`math`、`effect`、`rest`
 ## 5. 战斗与多目标
 
 `combatRules` 可声明 `initiative`、`turnResources`、`turnResourceLabels`、`actionCosts`、`actionTimings`、`primaryActionResource`、`lifePolicy`、`localActionHandler` 和 `defeatAtZeroHp`。`actionTimings` 只接受 `ANY`、`PARTICIPANT_TURN`。
+
+`encounterProfiles` 是开发者维护的可信敌人档案。键是可供 LLM 引用的 `profile_id`；值可包含 `initiative`、`ac`、`hp`、`maxHp`、`resistances`、`vulnerabilities`、`immunities`、`savingThrows` 和字符串 `attributes`。LLM 的 `start_combat` 只能提供实例 `id`、显示 `name` 与 `profile_id`，客户端会忽略模型叙事之外的规则主张，并从档案生成权威战斗数据。不要让模型生成或覆盖档案，也不要把用户输入写入这些字段。
+
+档案 ID 必须匹配 `[A-Za-z0-9_.-]` 安全格式；HP 必须为正数，`maxHp >= hp`。下载包解析时会拒绝非法范围、过多属性和超长伤害类型。若规则包没有任何 `encounterProfiles`，该规则包不能通过 LLM 开始战斗。
 
 D&D 本地武器/法术档案支持以下目标模式：
 
@@ -147,5 +161,7 @@ SHA-256 只能证明内容与索引一致，不能在索引源本身被篡改时
 4. 为内置包在 `RulesetAssetContractTest` 中直接加载 asset。
 5. 在 Android Studio 的 Debug 构建中新建冒险，检查规则包可见、创卡可保存、普通检定采用同一骰点。
 6. 若使用战斗，验证恢复存档后的先攻、回合资源与目标状态。
+7. 构造未知 `profile_id` 和伪造 HP/AC 的 `start_combat`，确认客户端在写入叙事和 Room 前拒绝整批事件。
+8. 构造未在对应 `action_id` 白名单内的 `require_roll.expression`，确认授权层拒绝该事件。
 
-当前解析器会忽略未知 JSON 字段，因此字段拼写错误可能不会直接报错；必须使用契约测试确认关键配置实际生效。
+当前解析器会拒绝未知 JSON 字段；字段拼写错误、旧的模型数值型 `start_combat` 以及未声明的档案字段都应视为契约错误。仍需使用契约测试确认字段语义和游戏结果符合预期。

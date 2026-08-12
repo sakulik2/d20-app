@@ -3,7 +3,6 @@ package xyz.sakulik.d20.app.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-import xyz.sakulik.d20.app.domain.combat.CombatantDefinition
 
 /**
  * 泛型化的 AI 交互协议
@@ -71,15 +70,23 @@ sealed class GameEvent {
 
     /**
      * 进入战斗事件
-     * @param combatants 具有稳定 ID 与规则属性的敌方战斗目标
+     * @param combatants 只包含叙事身份与受信任规则包档案引用
      */
     @Serializable
     @SerialName("start_combat")
     data class StartCombat(
-        val combatants: List<CombatantDefinition>
+        val combatants: List<EncounterParticipantRequest>
     ) : GameEvent()
 
 }
+
+@Serializable
+data class EncounterParticipantRequest(
+    val id: String,
+    val name: String,
+    @SerialName("profile_id")
+    val profileId: String
+)
 
 /**
  * 角色生成协议

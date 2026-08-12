@@ -24,13 +24,13 @@ import xyz.sakulik.d20.app.data.local.CharacterEntity
 import xyz.sakulik.d20.app.data.local.ItemEntity
 import xyz.sakulik.d20.app.data.model.CharacterGenState
 import xyz.sakulik.d20.app.data.model.ChatMessage
+import xyz.sakulik.d20.app.data.model.EncounterParticipantRequest
 import xyz.sakulik.d20.app.data.model.GameEvent
 import xyz.sakulik.d20.app.data.model.StreamState
 import xyz.sakulik.d20.app.data.repository.ContextAssembler
 import xyz.sakulik.d20.app.data.repository.InventoryRepository
 import xyz.sakulik.d20.app.data.repository.LlmRepository
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
-import xyz.sakulik.d20.app.domain.combat.CombatantDefinition
 import xyz.sakulik.d20.app.domain.rules.dynamic.CheckIntent
 import xyz.sakulik.d20.app.domain.rules.dynamic.DiceSubmission
 
@@ -100,7 +100,7 @@ class MainViewModelTest {
         viewModel.handleGameEvents(
             listOf(
                 GameEvent.StartCombat(
-                    listOf(CombatantDefinition("orc", "兽人", 10, 13, 20, 20))
+                    listOf(EncounterParticipantRequest("orc", "兽人", "orc"))
                 )
             )
         )
@@ -161,7 +161,7 @@ class MainViewModelTest {
         viewModel.handleGameEvents(
             listOf(
                 GameEvent.StartCombat(
-                    listOf(CombatantDefinition("goblin", "地精", 10, 12, 7, 7))
+                    listOf(EncounterParticipantRequest("goblin", "地精", "goblin"))
                 )
             )
         )

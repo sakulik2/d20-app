@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import xyz.sakulik.d20.app.domain.combat.CombatantDefinition
 import xyz.sakulik.d20.app.util.LlmJsonBuffer
 
 class AIProtocolTest {
@@ -121,7 +120,7 @@ class AIProtocolTest {
     }
 
     @Test
-    fun parseStructuredCombatants() {
+    fun parseEncounterProfileReferences() {
         val raw = """
             {
               "narrative": "地精拔出了短刀。",
@@ -131,14 +130,7 @@ class AIProtocolTest {
                   "combatants": [{
                     "id": "goblin_1",
                     "name": "地精斥候",
-                    "initiative": 14,
-                    "ac": 15,
-                    "hp": 7,
-                    "max_hp": 7,
-                    "resistances": ["poison"],
-                    "vulnerabilities": [],
-                    "immunities": ["psychic"]
-                    ,"saving_throws": {"dex": 2, "wis": 0}
+                    "profile_id": "goblin"
                   }]
                 }
               ]
@@ -149,23 +141,17 @@ class AIProtocolTest {
             ?.gameEvents?.single() as GameEvent.StartCombat
 
         assertEquals(
-            CombatantDefinition(
+            EncounterParticipantRequest(
                 id = "goblin_1",
                 name = "地精斥候",
-                initiative = 14,
-                ac = 15,
-                hp = 7,
-                maxHp = 7,
-                resistances = listOf("poison"),
-                immunities = listOf("psychic"),
-                savingThrows = mapOf("dex" to 2, "wis" to 0)
+                profileId = "goblin"
             ),
             event.combatants.single()
         )
     }
 
     @Test
-    fun parseRulesetNeutralCombatantAttributes() {
+    fun rejectModelSuppliedCombatantRules() {
         val raw = """
             {
               "narrative": "对手进入冲突。",
@@ -174,22 +160,13 @@ class AIProtocolTest {
                 "combatants": [{
                   "id": "opponent",
                   "name": "对手",
-                  "initiative": 40,
-                  "attributes": {
-                    "dodge": "55",
-                    "build": "1"
-                  }
+                  "profile_id": "goblin",
+                  "hp": 999
                 }]
               }]
             }
         """.trimIndent()
 
-        val event = LlmJsonBuffer.parseAndRepair(raw).getRightOrNull()
-            ?.gameEvents?.single() as GameEvent.StartCombat
-
-        assertEquals(
-            mapOf("dodge" to "55", "build" to "1"),
-            event.combatants.single().attributes
-        )
+        assertTrue(LlmJsonBuffer.parseAndRepair(raw).isLeft())
     }
 }

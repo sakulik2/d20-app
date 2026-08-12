@@ -4,7 +4,6 @@ import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import xyz.sakulik.d20.app.domain.combat.CombatantDefinition
 
 class GameEventBatchValidatorTest {
     @Test
@@ -64,16 +63,16 @@ class GameEventBatchValidatorTest {
     }
 
     @Test
-    fun rejectsInvalidCombatantRange() {
+    fun rejectsInvalidEncounterProfileId() {
         val error = GameEventBatchValidator.validate(
             listOf(
                 GameEvent.StartCombat(
-                    listOf(CombatantDefinition("goblin", "地精", 10, 12, -1, 7))
+                    listOf(EncounterParticipantRequest("goblin", "地精", "../../profile"))
                 )
             )
         )
 
-        assertTrue(error?.message?.contains("HP") == true)
+        assertTrue(error?.message?.contains("profile_id") == true)
     }
 
     @Test

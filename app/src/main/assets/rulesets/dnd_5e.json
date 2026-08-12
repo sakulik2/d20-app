@@ -2,14 +2,19 @@
     "id": "dnd_5e",
     "name": "龙与地下城 5E",
     "description": "最伟大的奇幻冒险。经典 d20 规则体系。",
-    "version": "1.0",
+    "version": "1.1.0",
     "checkRules": {
         "targetSource": "EVENT",
     "modifierSource": "ABILITY_MODIFIER",
     "equipmentBonusAppliesTo": "MODIFIER",
     "equipmentBonusActionIds": ["dnd_check"],
-    "defaultActionId": "dnd_check",
+        "defaultActionId": "dnd_check",
         "requiredTargetActionIds": ["dnd_check"],
+        "allowedDiceExpressions": {
+            "dnd_check": ["1d20", "2d20kh1", "2d20kl1"],
+            "dnd_attack": ["1d20"],
+            "dnd_cast": ["1d20"]
+        },
         "statAliases": {
             "str": ["力量", "strength"],
             "dex": ["敏捷", "dexterity"],
@@ -27,6 +32,31 @@
             "statTransform": "ABILITY_MODIFIER",
             "defaultValue": 0,
             "label": "玩家先攻"
+        },
+        "encounterProfiles": {
+            "goblin": {
+                "initiative": 10,
+                "ac": 12,
+                "hp": 7,
+                "maxHp": 7,
+                "savingThrows": {"dex": 2},
+                "attributes": {"creature_type": "humanoid"}
+            },
+            "orc": {
+                "initiative": 10,
+                "ac": 13,
+                "hp": 20,
+                "maxHp": 20,
+                "savingThrows": {"str": 3},
+                "attributes": {"creature_type": "humanoid"}
+            },
+            "bandit": {
+                "initiative": 11,
+                "ac": 12,
+                "hp": 11,
+                "maxHp": 11,
+                "attributes": {"creature_type": "humanoid"}
+            }
         },
         "turnResources": {
             "action": 1,
@@ -52,7 +82,7 @@
         "defeatAtZeroHp": true
     },
     "systemPromptInjection": {
-        "prompt": "你现在是一个《龙与地下城》第5版（DnD 5e）的地下城主（DM）。普通检定使用 require_roll/action_id=dnd_check，并提供 threshold 与 stat_id。攻击使用 action_id=dnd_attack 与 target_id；施法使用 action_id=dnd_cast 与可选 target_id。武器、法术、环级、命中、豁免、伤害与资源消耗均由本地规则档案裁决，不要编造 modifier、damage_formula 或 slot_level。target_id 必须来自此前 start_combat 中声明的稳定目标 ID。进入战斗时每个敌人提供 id、name、initiative、ac、hp、max_hp、resistances、vulnerabilities、immunities，并暂时将 saving_throws 与 attributes 设为空对象；start_combat 必须是本次回复唯一事件。不得输出 update_stat、end_combat、update_lore 或 remove_lore。在创卡环节，请根据角色背景生成合适的背景和子职。"
+        "prompt": "你现在是一个《龙与地下城》第5版（DnD 5e）的地下城主（DM）。普通检定使用 require_roll/action_id=dnd_check，并提供 threshold 与 stat_id。攻击使用 action_id=dnd_attack 与 target_id；施法使用 action_id=dnd_cast 与可选 target_id。武器、法术、环级、命中、豁免、伤害与资源消耗均由本地规则档案裁决，不要编造 modifier、damage_formula 或 slot_level。target_id 必须来自此前 start_combat 中声明的稳定目标 ID。进入战斗时每个敌人只提供 id、name、profile_id；profile_id 只能使用 goblin、orc、bandit，禁止提供 HP、AC、先攻、豁免、抗性或其他规则数值；start_combat 必须是本次回复唯一事件。不得输出 update_stat、end_combat、update_lore 或 remove_lore。在创卡环节，请根据角色背景生成合适的背景和子职。"
     },
     "characterTemplate": {
         "defaultStats": {

@@ -24,6 +24,26 @@ class DynamicRulesetEngineTest {
     }
 
     @Test
+    fun detailedParserRejectsUnknownManifestFields() {
+        val result = RulesetProvider.parseManifestDetailed(
+            """
+            {
+              "id":"test",
+              "name":"Test",
+              "version":"1.0.0",
+              "unknownField":true
+            }
+            """.trimIndent()
+        )
+
+        assertTrue(result is RulesetProvider.ParseResult.Invalid)
+        assertEquals(
+            "INVALID_RULESET_JSON",
+            (result as RulesetProvider.ParseResult.Invalid).errors.single().code
+        )
+    }
+
+    @Test
     fun useInjectedRollInsteadOfRollingAgain() {
         val ruleset = createRuleset(
             entryNodeId = "roll",
@@ -170,7 +190,11 @@ class DynamicRulesetEngineTest {
         val errors = RulesetProvider.validateManifest(manifest)
 
         assertEquals(
-            setOf("MISSING_ENTRY_NODE", "MISSING_REFERENCED_NODE"),
+            setOf(
+                "MISSING_DEFAULT_CHECK_DICE_POLICY",
+                "MISSING_ENTRY_NODE",
+                "MISSING_REFERENCED_NODE"
+            ),
             errors.map { it.code }.toSet()
         )
     }
@@ -204,6 +228,7 @@ class DynamicRulesetEngineTest {
         assertEquals(
             setOf(
                 "UNSUPPORTED_INITIATIVE_TRANSFORM",
+                "MISSING_DEFAULT_CHECK_DICE_POLICY",
                 "UNSUPPORTED_LIFE_POLICY",
                 "UNSUPPORTED_LOCAL_ACTION_HANDLER",
                 "INVALID_TURN_RESOURCE",
@@ -213,6 +238,32 @@ class DynamicRulesetEngineTest {
             ),
             errors.map { it.code }.toSet()
         )
+    }
+
+    @Test
+    fun manifestValidationRejectsUnsafeEncounterProfile() {
+        val manifest = RulesetManifest(
+            id = "invalid_encounter",
+            name = "Invalid Encounter",
+            version = "1",
+            systemPromptInjection = SystemPromptInjection(""),
+            characterTemplate = CharacterTemplate(emptyMap()),
+            uiBlueprint = UiBlueprint("TEST", emptyMap()),
+            combatRules = CombatRules(
+                encounterProfiles = mapOf(
+                    "../dragon" to EncounterProfile(hp = -1, maxHp = -1)
+                )
+            ),
+            mechanicsPipeline = MechanicsPipeline(
+                entryNodeId = "result",
+                nodes = mapOf("result" to resultNode(ResultState.SUCCESS))
+            )
+        )
+
+        val errors = RulesetProvider.validateManifest(manifest)
+
+        assertTrue(errors.any { it.code == "INVALID_ENCOUNTER_PROFILE_ID" })
+        assertTrue(errors.any { it.code == "MISSING_DEFAULT_CHECK_DICE_POLICY" })
     }
 
     @Test
@@ -247,6 +298,32 @@ class DynamicRulesetEngineTest {
             ),
             errors.map { it.code }.toSet()
         )
+    }
+
+    @Test
+    fun manifestValidationRejectsUnsafeAllowedDicePolicy() {
+        val manifest = RulesetManifest(
+            id = "invalid_dice_policy",
+            name = "Invalid Dice Policy",
+            version = "1",
+            systemPromptInjection = SystemPromptInjection(""),
+            characterTemplate = CharacterTemplate(emptyMap()),
+            uiBlueprint = UiBlueprint("TEST", emptyMap()),
+            checkRules = CheckRules(
+                allowedDiceExpressions = mapOf(
+                    "../action" to listOf("1000d1000!")
+                )
+            ),
+            mechanicsPipeline = MechanicsPipeline(
+                entryNodeId = "result",
+                nodes = mapOf("result" to resultNode(ResultState.SUCCESS))
+            )
+        )
+
+        val errors = RulesetProvider.validateManifest(manifest)
+
+        assertTrue(errors.any { it.code == "INVALID_CHECK_DICE_POLICY" })
+        assertTrue(errors.any { it.code == "MISSING_DEFAULT_CHECK_DICE_POLICY" })
     }
 
     @Test

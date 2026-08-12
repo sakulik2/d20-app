@@ -45,6 +45,7 @@ data class CheckRules(
     val equipmentBonusActionIds: List<String> = emptyList(),
     val defaultActionId: String = "dynamic_roll",
     val requiredTargetActionIds: List<String> = emptyList(),
+    val allowedDiceExpressions: Map<String, List<String>> = emptyMap(),
     val statAliases: Map<String, List<String>> = emptyMap(),
     val targetLabel: String = "DC"
 )
@@ -52,6 +53,7 @@ data class CheckRules(
 @Serializable
 data class CombatRules(
     val initiative: InitiativeRules? = null,
+    val encounterProfiles: Map<String, EncounterProfile> = emptyMap(),
     val turnResources: Map<String, Int> = emptyMap(),
     val turnResourceLabels: Map<String, String> = emptyMap(),
     val actionCosts: Map<String, Map<String, Int>> = emptyMap(),
@@ -60,6 +62,19 @@ data class CombatRules(
     val lifePolicy: String = "NONE",
     val localActionHandler: String = "NONE",
     val defeatAtZeroHp: Boolean = false
+)
+
+@Serializable
+data class EncounterProfile(
+    val initiative: Int = 0,
+    val ac: Int = 0,
+    val hp: Int = 1,
+    val maxHp: Int = hp,
+    val resistances: List<String> = emptyList(),
+    val vulnerabilities: List<String> = emptyList(),
+    val immunities: List<String> = emptyList(),
+    val savingThrows: Map<String, Int> = emptyMap(),
+    val attributes: Map<String, String> = emptyMap()
 )
 
 @Serializable
@@ -948,7 +963,7 @@ object RulesetProvider {
     }
 
     private val jsonConfig = Json {
-        ignoreUnknownKeys = true
+        ignoreUnknownKeys = false
         serializersModule = rulesetModule
         classDiscriminator = "type" // 依据 JSON 里的 "type" 字段做动态派发
     }
@@ -1020,6 +1035,38 @@ object RulesetProvider {
                     message = "默认检定动作 ID 不能为空"
                 )
             )
+        } else if (checkRules.defaultActionId !in checkRules.allowedDiceExpressions) {
+            errors.add(
+                RuleError(
+                    code = "MISSING_DEFAULT_CHECK_DICE_POLICY",
+                    message = "默认动作 ${checkRules.defaultActionId} 必须声明允许骰式"
+                )
+            )
+        }
+        checkRules.allowedDiceExpressions.forEach { (actionId, expressions) ->
+            when {
+                !SAFE_RULE_ID.matches(actionId) -> errors.add(
+                    RuleError(
+                        code = "INVALID_CHECK_DICE_POLICY",
+                        message = "骰式白名单动作 ID $actionId 格式无效"
+                    )
+                )
+                expressions.isEmpty() || expressions.size > 20 -> errors.add(
+                    RuleError(
+                        code = "INVALID_CHECK_DICE_POLICY",
+                        message = "动作 $actionId 必须声明 1 至 20 个允许骰式"
+                    )
+                )
+                expressions.any { expression ->
+                    expression.isBlank() || expression.length > 64 ||
+                        !SAFE_DICE_EXPRESSION.matches(normalizeDicePolicyExpression(expression))
+                } -> errors.add(
+                    RuleError(
+                        code = "INVALID_CHECK_DICE_POLICY",
+                        message = "动作 $actionId 包含不安全的允许骰式"
+                    )
+                )
+            }
         }
         val supportedTransforms = setOf("NONE", "RAW_VALUE", "ABILITY_MODIFIER")
         val supportedLifePolicies = setOf("NONE", "DND_5E")
@@ -1095,6 +1142,57 @@ object RulesetProvider {
                 )
             }
         }
+        combatRules.encounterProfiles.forEach { (profileId, profile) ->
+            when {
+                !SAFE_RULE_ID.matches(profileId) -> errors.add(
+                    RuleError(
+                        code = "INVALID_ENCOUNTER_PROFILE_ID",
+                        message = "遭遇档案 ID $profileId 格式无效"
+                    )
+                )
+                profile.initiative !in -1_000..1_000 -> errors.add(
+                    RuleError(
+                        code = "INVALID_ENCOUNTER_PROFILE",
+                        message = "遭遇档案 $profileId 的先攻超出安全范围"
+                    )
+                )
+                profile.ac !in 0..1_000 -> errors.add(
+                    RuleError(
+                        code = "INVALID_ENCOUNTER_PROFILE",
+                        message = "遭遇档案 $profileId 的 AC 超出安全范围"
+                    )
+                )
+                profile.hp !in 1..1_000_000 || profile.maxHp !in profile.hp..1_000_000 -> errors.add(
+                    RuleError(
+                        code = "INVALID_ENCOUNTER_PROFILE",
+                        message = "遭遇档案 $profileId 的生命值无效"
+                    )
+                )
+                profile.savingThrows.size > 50 ||
+                    profile.savingThrows.values.any { it !in -1_000..1_000 } -> errors.add(
+                    RuleError(
+                        code = "INVALID_ENCOUNTER_PROFILE",
+                        message = "遭遇档案 $profileId 的豁免数据无效"
+                    )
+                )
+                profile.attributes.size > 50 ||
+                    profile.attributes.any { (key, value) -> key.length > 64 || value.length > 500 } -> errors.add(
+                    RuleError(
+                        code = "INVALID_ENCOUNTER_PROFILE",
+                        message = "遭遇档案 $profileId 的规则属性无效"
+                    )
+                )
+                listOf(profile.resistances, profile.vulnerabilities, profile.immunities)
+                    .any { values ->
+                        values.size > 50 || values.any { it.isBlank() || it.length > 64 }
+                    } -> errors.add(
+                    RuleError(
+                        code = "INVALID_ENCOUNTER_PROFILE",
+                        message = "遭遇档案 $profileId 的伤害类型列表无效"
+                    )
+                )
+            }
+        }
         if (manifest.mechanicsPipeline.entryNodeId !in nodes) {
             errors.add(
                 RuleError(
@@ -1119,6 +1217,14 @@ object RulesetProvider {
         }
         return errors
     }
+
+    private val SAFE_RULE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    private val SAFE_DICE_EXPRESSION = Regex(
+        "^(?:(?:[1-9]\\d?|100))?d(?:[1-9]\\d{0,3}|10000)(?:kh1|kl1)?(?:[+-]\\d{1,6})?$"
+    )
+
+    private fun normalizeDicePolicyExpression(expression: String): String =
+        expression.filterNot(Char::isWhitespace).lowercase()
 
     private fun LogicNode.referencedNodeIds(): Set<String> {
         val references = mutableSetOf<String>()

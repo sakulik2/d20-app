@@ -77,21 +77,7 @@ object GameEventBatchValidator {
                 !SAFE_ID.matches(combatant.id) -> return "敌方参与者 ID 格式无效"
                 combatant.id.equals("player", ignoreCase = true) -> return "敌方参与者不能使用保留 ID player"
                 combatant.name.isBlank() || combatant.name.length > 100 -> return "敌方参与者名称无效"
-                combatant.initiative !in -1_000..1_000 -> return "敌方先攻超出安全范围"
-                combatant.ac !in 0..1_000 -> return "敌方 AC 超出安全范围"
-                combatant.hp !in 1..1_000_000 -> return "敌方 HP 超出安全范围"
-                combatant.maxHp !in combatant.hp..1_000_000 -> return "敌方 max_hp 必须不小于当前 HP"
-                combatant.savingThrows.size > 50 -> return "敌方豁免字段过多"
-                combatant.savingThrows.values.any { it !in -1_000..1_000 } -> return "敌方豁免值超出安全范围"
-                combatant.attributes.size > 50 -> return "敌方规则属性过多"
-                combatant.attributes.any { (key, value) -> key.length > 64 || value.length > 500 } ->
-                    return "敌方规则属性过长"
-                listOf(
-                    combatant.resistances,
-                    combatant.vulnerabilities,
-                    combatant.immunities
-                ).any { values -> values.size > 50 || values.any { it.isBlank() || it.length > 64 } } ->
-                    return "敌方伤害类型列表无效"
+                !SAFE_ID.matches(combatant.profileId) -> return "敌方 profile_id 格式无效"
             }
         }
         return null

@@ -18,9 +18,12 @@ import xyz.sakulik.d20.app.data.local.GameStateDao
 import xyz.sakulik.d20.app.data.local.MessageDao
 import xyz.sakulik.d20.app.data.local.MessageEntity
 import xyz.sakulik.d20.app.data.model.GameEvent
-import xyz.sakulik.d20.app.data.model.GameEventBatchValidator
+import xyz.sakulik.d20.app.data.model.GameEventAuthorizationContext
+import xyz.sakulik.d20.app.data.model.GameEventAuthorizationResult
 import xyz.sakulik.d20.app.data.model.LlmResponseFormatException
 import xyz.sakulik.d20.app.data.model.StreamState
+import xyz.sakulik.d20.app.data.model.TrustedGameEvent
+import xyz.sakulik.d20.app.data.model.TrustedGameEventAuthorizer
 import xyz.sakulik.d20.app.data.repository.ContextAssembler
 import xyz.sakulik.d20.app.data.repository.InventoryRepository
 import xyz.sakulik.d20.app.data.repository.LlmRepository
@@ -254,17 +257,17 @@ class MainViewModel(
                     updateState { it.copy(streamingNarrative = it.streamingNarrative + state.delta) }
                 }
                 is StreamState.Completed -> {
-                    val validationError = GameEventBatchValidator.validate(state.response.gameEvents)
-                    if (validationError != null) {
+                    val authorization = authorizeGameEvents(state.response.gameEvents)
+                    if (authorization is GameEventAuthorizationResult.Rejected) {
                         updateState { it.copy(streamingNarrative = "", isLoading = false) }
                         if (retryCount < 1) {
                             sendActionInternal(
                                 text = "",
                                 retryCount = retryCount + 1,
-                                protocolCorrection = validationError.message
+                                protocolCorrection = authorization.message
                             )
                         } else {
-                            sendEvent(MainUiEvent.Error("模型事件协议无效：${validationError.message}"))
+                            sendEvent(MainUiEvent.Error("模型事件未获规则授权：${authorization.message}"))
                         }
                         return@collect
                     }
@@ -276,7 +279,9 @@ class MainViewModel(
                         )
                     )
                     updateState { it.copy(streamingNarrative = "", isLoading = false) }
-                    handleGameEvents(state.response.gameEvents)
+                    executeTrustedGameEvents(
+                        (authorization as GameEventAuthorizationResult.Authorized).events
+                    )
                 }
                 is StreamState.Error -> {
                     updateState { it.copy(isLoading = false, streamingNarrative = "") }
@@ -296,14 +301,41 @@ class MainViewModel(
     }
 
     internal suspend fun handleGameEvents(events: List<GameEvent>) {
-        GameEventBatchValidator.validate(events)?.let { error ->
-            sendEvent(MainUiEvent.Error("模型事件协议无效：${error.message}"))
-            return
+        when (val authorization = authorizeGameEvents(events)) {
+            is GameEventAuthorizationResult.Authorized ->
+                executeTrustedGameEvents(authorization.events)
+            is GameEventAuthorizationResult.Rejected ->
+                sendEvent(MainUiEvent.Error("模型事件未获规则授权：${authorization.message}"))
         }
+    }
+
+    private fun authorizeGameEvents(events: List<GameEvent>): GameEventAuthorizationResult {
+        val character = uiState.value.character
+            ?: return GameEventAuthorizationResult.Rejected("当前角色尚未加载")
+        val ruleset = RulesetRegistry.getRuleset(context, character.activeSystem)
+            ?: return GameEventAuthorizationResult.Rejected("找不到当前规则包")
+        return TrustedGameEventAuthorizer.authorize(
+            events,
+            GameEventAuthorizationContext.from(
+                ruleset = ruleset,
+                characterStats = character.stats,
+                combatTargetIds = combatStateManager.currentState().availableTargets
+                    .mapTo(linkedSetOf()) { it.id },
+                weaponIds = uiState.value.availableWeapons.mapTo(linkedSetOf()) { it.itemId },
+                spellIds = uiState.value.preparedSpells.mapTo(linkedSetOf()) { it.spellId },
+                availableSpellSlotLevels = uiState.value.availableSpellSlotLevels.toSet(),
+                canStartCombat = pendingCombatants == null &&
+                    !combatStateManager.currentState().isActive
+            )
+        )
+    }
+
+    private suspend fun executeTrustedGameEvents(events: List<TrustedGameEvent>) {
         events.forEach { event ->
             when (event) {
-                is GameEvent.RequireRoll -> {
-                    val parsedReq = xyz.sakulik.d20.app.util.CheckReasonParser.parse(event.reason)
+                is TrustedGameEvent.RequireRoll -> {
+                    val request = event.request
+                    val parsedReq = xyz.sakulik.d20.app.util.CheckReasonParser.parse(request.reason)
                     val charStats = uiState.value.character?.stats ?: emptyMap()
                     val ruleset = RulesetRegistry.getRuleset(
                         context,
@@ -315,17 +347,17 @@ class MainViewModel(
                     }
                     val checkPolicy = RulesetCheckPolicy.from(ruleset)
                     val statId = checkPolicy.resolveStatId(
-                        requestedStatId = event.statId,
-                        reason = event.reason,
+                        requestedStatId = request.statId,
+                        reason = request.reason,
                         character = charStats
                     ).orEmpty()
                     val localStatValue = charStats[statId]?.toIntOrNull()
                     val checkParameters = checkPolicy.resolve(
-                        requestedActionId = event.actionId,
+                        requestedActionId = request.actionId,
                         statValue = localStatValue,
-                        eventThreshold = event.threshold,
-                        eventTargetValue = event.targetValue,
-                        eventModifier = event.modifier
+                        eventThreshold = request.threshold,
+                        eventTargetValue = request.targetValue,
+                        eventModifier = request.modifier
                     )
                     val equippedBonus = statId
                         .takeIf {
@@ -346,7 +378,7 @@ class MainViewModel(
                     val activeCombatPolicy = combatPolicy(uiState.value.activeRulesetId)
                     val actionId = finalCheckParameters.actionId
                     checkPolicy.validationError(finalCheckParameters)?.let { error ->
-                        sendEvent(MainUiEvent.Error("检定“${event.reason}”：$error"))
+                        sendEvent(MainUiEvent.Error("检定“${request.reason}”：$error"))
                         return@forEach
                     }
                     if (
@@ -380,15 +412,15 @@ class MainViewModel(
                         }
                     }
                     val rollState = when {
-                        event.expression.contains("kh", ignoreCase = true) -> "ADVANTAGE"
-                        event.expression.contains("kl", ignoreCase = true) -> "DISADVANTAGE"
+                        request.expression.contains("kh", ignoreCase = true) -> "ADVANTAGE"
+                        request.expression.contains("kl", ignoreCase = true) -> "DISADVANTAGE"
                         else -> "NORMAL"
                     }
 
                     val targetLabel = targetValue?.let {
                         ", ${finalCheckParameters.targetLabel}: $it"
                     }.orEmpty()
-                    val reqMsg = "> **检定需求：${parsedReq.displayTitle}** (规则: ${event.expression}$targetLabel)"
+                    val reqMsg = "> **检定需求：${parsedReq.displayTitle}** (规则: ${request.expression}$targetLabel)"
                     messageDao.insertMessage(
                         MessageEntity(campaignId = campaignId, role = "assistant", content = reqMsg)
                     )
@@ -396,8 +428,8 @@ class MainViewModel(
                     val intent = xyz.sakulik.d20.app.domain.rules.dynamic.CheckIntent(
                         actionId = actionId,
                         meta = mapOf(
-                            "expression" to event.expression,
-                            "reason" to event.reason,
+                            "expression" to request.expression,
+                            "reason" to request.reason,
                             "dc" to (targetValue?.toString() ?: "0"),
                             "target_value" to (targetValue?.toString() ?: "0"),
                             "target_label" to finalCheckParameters.targetLabel,
@@ -405,32 +437,33 @@ class MainViewModel(
                             "modifier" to modifier.toString(),
                             "bonus_injected" to equippedBonus.toString(),
                             "roll_state" to rollState,
-                            "target_id" to event.targetId.orEmpty(),
-                            "slot_level" to (event.slotLevel?.toString() ?: ""),
-                            "weapon_id" to event.weaponId.orEmpty(),
-                            "spell_id" to event.spellId.orEmpty(),
+                            "target_id" to request.targetId.orEmpty(),
+                            "slot_level" to (request.slotLevel?.toString() ?: ""),
+                            "weapon_id" to request.weaponId.orEmpty(),
+                            "spell_id" to request.spellId.orEmpty(),
                             "resolution_stage" to "PRIMARY"
                         )
                     )
                     updateState { it.copy(isDicePanelVisible = true, currentDiceIntent = intent) }
                     sendEvent(MainUiEvent.ShowDicePanel(intent))
                 }
-                is GameEvent.AddItem -> {
+                is TrustedGameEvent.AddNarrativeItem -> {
+                    val item = event.item
                     val cid = campaignId
                     inventoryRepository.addItem(xyz.sakulik.d20.app.data.local.ItemEntity(
                         id = UUID.randomUUID().toString(),
                         campaignId = cid,
-                        name = event.name,
-                        description = event.description,
-                        category = event.category,
-                        modifiers = event.modifiers.mapValues { (_, v) ->
+                        name = item.name,
+                        description = item.description,
+                        category = item.category,
+                        modifiers = item.modifiers.mapValues { (_, v) ->
                             if (v is JsonPrimitive) v.content else v.toString().removeSurrounding("\"")
                         },
                         isEquipped = false
                     ))
                     sensoryController?.hapticItemGain()
                 }
-                is GameEvent.StartCombat -> {
+                is TrustedGameEvent.StartCombat -> {
                     val character = uiState.value.character
                     if (character == null) {
                         sendEvent(MainUiEvent.Error("没有可加入战斗的玩家角色"))
@@ -500,6 +533,7 @@ class MainViewModel(
         viewModelScope.launch {
             val policy = combatPolicy()
             val character = uiState.value.character ?: return@launch
+            val previousCombatState = combatStateManager.currentState()
             val advance = combatStateManager.advanceTurn(
                 playerTurnResources = policy.initialTurnResources(isPlayerTurn = true)
             )
@@ -537,13 +571,22 @@ class MainViewModel(
             val targetHpUpdates = advance.ticks
                 .filter { it.effect.targetId != CombatStateManager.PLAYER_ID }
                 .associate { it.effect.targetId to it.currentHp }
-            gameStateDao.applyRuleOutcomes(
-                character = updatedCharacter,
-                targetHpUpdates = targetHpUpdates,
-                combatSession = reconciledState.takeIf { it.isActive && !advance.combatEnded }
-                    ?.toEntity(campaignId, policy),
-                combatEnded = advance.combatEnded
-            )
+            try {
+                gameStateDao.applyRuleOutcomes(
+                    character = updatedCharacter,
+                    targetHpUpdates = targetHpUpdates,
+                    combatSession = reconciledState.takeIf { it.isActive && !advance.combatEnded }
+                        ?.toEntity(campaignId, policy),
+                    combatEnded = advance.combatEnded
+                )
+            } catch (error: CancellationException) {
+                combatStateManager.restoreState(previousCombatState)
+                throw error
+            } catch (error: Exception) {
+                combatStateManager.restoreState(previousCombatState)
+                sendEvent(MainUiEvent.Error("推进战斗失败：${error.message ?: "状态写入失败"}"))
+                return@launch
+            }
             syncCharacterState(updatedCharacter)
             if (advance.combatEnded) {
                 combatStateManager.endCombat()
@@ -1599,6 +1642,7 @@ class MainViewModel(
         participantInitiative: Int,
         policy: RulesetCombatPolicy
     ) {
+        val previousCombatState = combatStateManager.currentState()
         val combatState = combatStateManager.startCombat(
             enemies = enemies,
             playerName = character.name,
@@ -1611,11 +1655,20 @@ class MainViewModel(
             playerTurnResources = policy.initialTurnResources(isPlayerTurn = true),
             defeatAtZeroHp = policy.rules.defeatAtZeroHp
         )
-        gameStateDao.startCombat(
-            campaignId = campaignId,
-            combatants = enemies.map { combatant -> combatant.toEntity(campaignId) },
-            session = combatState.toEntity(campaignId, policy)
-        )
+        try {
+            gameStateDao.startCombat(
+                campaignId = campaignId,
+                combatants = enemies.map { combatant -> combatant.toEntity(campaignId) },
+                session = combatState.toEntity(campaignId, policy)
+            )
+        } catch (error: CancellationException) {
+            combatStateManager.restoreState(previousCombatState)
+            throw error
+        } catch (error: Exception) {
+            combatStateManager.restoreState(previousCombatState)
+            sendEvent(MainUiEvent.Error("开始战斗失败：${error.message ?: "状态写入失败"}"))
+            return
+        }
         updateState {
             it.copy(
                 combatState = combatState,

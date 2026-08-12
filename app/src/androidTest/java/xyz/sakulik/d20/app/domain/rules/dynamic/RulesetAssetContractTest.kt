@@ -41,9 +41,11 @@ class RulesetAssetContractTest {
         assertEquals("dnd_5e", dnd.id)
         assertEquals("ABILITY_MODIFIER", dnd.checkRules.modifierSource)
         assertEquals("DC", dnd.checkRules.targetLabel)
+        assertEquals(20, dnd.combatRules.encounterProfiles.getValue("orc").hp)
         assertEquals("coc_7e", coc.id)
         assertEquals("STAT_VALUE", coc.checkRules.targetSource)
         assertEquals("目标值", coc.checkRules.targetLabel)
+        assertEquals(50, coc.combatRules.encounterProfiles.getValue("cultist").initiative)
     }
 
     @Test

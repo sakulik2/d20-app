@@ -74,23 +74,7 @@ object AiResponseSchema {
         val fields = linkedMapOf(
             "id" to stringSchema(),
             "name" to stringSchema(),
-            "initiative" to integerSchema(),
-            "ac" to integerSchema(),
-            "hp" to integerSchema(),
-            "max_hp" to integerSchema(),
-            "resistances" to stringArraySchema(),
-            "vulnerabilities" to stringArraySchema(),
-            "immunities" to stringArraySchema(),
-            "saving_throws" to obj(
-                "type" to JsonPrimitive("object"),
-                "additionalProperties" to JsonPrimitive(false),
-                "properties" to obj()
-            ),
-            "attributes" to obj(
-                "type" to JsonPrimitive("object"),
-                "additionalProperties" to JsonPrimitive(false),
-                "properties" to obj()
-            )
+            "profile_id" to stringSchema()
         )
         return strictObject(fields)
     }
@@ -117,19 +101,12 @@ object AiResponseSchema {
 
     private fun stringSchema(): JsonObject = obj("type" to JsonPrimitive("string"))
 
-    private fun integerSchema(): JsonObject = obj("type" to JsonPrimitive("integer"))
-
     private fun nullableStringSchema(): JsonObject = obj(
         "type" to array("string", "null")
     )
 
     private fun nullableIntegerSchema(): JsonObject = obj(
         "type" to array("integer", "null")
-    )
-
-    private fun stringArraySchema(): JsonObject = obj(
-        "type" to JsonPrimitive("array"),
-        "items" to stringSchema()
     )
 
     private fun obj(vararg values: Pair<String, kotlinx.serialization.json.JsonElement>): JsonObject =
