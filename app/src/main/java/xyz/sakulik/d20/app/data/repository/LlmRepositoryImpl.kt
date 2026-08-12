@@ -395,7 +395,7 @@ class LlmRepositoryImpl(
                 structuredOutputMode != StructuredOutputMode.NONE &&
                 !isOpenAiEndpoint(baseUrl)
             ) {
-                4096
+                outputSpec.outputTokenLimit
             } else {
                 null
             },
@@ -403,7 +403,7 @@ class LlmRepositoryImpl(
                 structuredOutputMode != StructuredOutputMode.NONE &&
                 isOpenAiEndpoint(baseUrl)
             ) {
-                4096
+                outputSpec.outputTokenLimit
             } else {
                 null
             }
@@ -437,7 +437,8 @@ class LlmRepositoryImpl(
             model = model,
             messages = messages,
             stream = stream,
-            outputFormat = outputFormat
+            outputFormat = outputFormat,
+            maxTokens = outputSpec.outputTokenLimit
         )
         return Request.Builder()
             .url(buildEndpoint(baseUrl, "v1/messages"))
@@ -474,7 +475,11 @@ class LlmRepositoryImpl(
             } else {
                 null
             },
-            maxOutputTokens = if (structuredOutputMode == StructuredOutputMode.NONE) null else 4096
+            maxOutputTokens = if (structuredOutputMode == StructuredOutputMode.NONE) {
+                null
+            } else {
+                outputSpec.outputTokenLimit
+            }
         )
         return Request.Builder()
             .url(buildEndpoint(baseUrl, "v1/responses"))
@@ -580,6 +585,47 @@ class LlmRepositoryImpl(
         }.orEmpty()
     }
 
+    private fun nonStreamingCompletionFailure(protocol: ApiProtocol, body: String): String? {
+        return runCatching {
+            val root = json.parseToJsonElement(body).jsonObject
+            when (protocol) {
+                ApiProtocol.ANTHROPIC -> root["stop_reason"]
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    ?.takeUnless { it in ANTHROPIC_SUCCESS_STOP_REASONS }
+                    ?.let { reason -> "Anthropic 响应未正常结束：$reason" }
+                ApiProtocol.RESPONSES -> {
+                    val status = root["status"]?.jsonPrimitive?.contentOrNull
+                    val reason = root["incomplete_details"]
+                        ?.jsonObject
+                        ?.get("reason")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                    if (status == "incomplete" || status == "failed") {
+                        "Responses API 响应未正常结束：${reason ?: status}"
+                    } else {
+                        null
+                    }
+                }
+                else -> root["choices"]
+                    ?.jsonArray
+                    ?.firstOrNull()
+                    ?.jsonObject
+                    ?.get("finish_reason")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    ?.takeUnless { it in CHAT_SUCCESS_FINISH_REASONS }
+                    ?.let { reason ->
+                        if (reason == "length") {
+                            "模型输出达到长度上限，JSON 未完成"
+                        } else {
+                            "Chat Completions 响应未正常结束：$reason"
+                        }
+                    }
+            }
+        }.getOrNull()
+    }
+
     private fun extractJsonObject(text: String): String {
         return LlmJsonBuffer.extractJson(text)
             ?: throw LlmResponseFormatException("模型必须只返回一个完整 JSON 对象")
@@ -682,23 +728,20 @@ class LlmRepositoryImpl(
         val basePromptInjection = promptInjection ?: "该规则系统的核心属性"
 
         val prompt = """
-            你是一个 TRPG 创卡助手。请根据以下描述，为 [${rulesetId}] 规则系统生成一个角色。
-            描述：${description}
-            
-            规则特定指导：${basePromptInjection}
-            
-            要求返回 JSON（json）格式，包含以下字段：
-            - name: 角色姓名
-            - stats: 叙事属性 Map (包含 race, subrace, class, subclass, background, occupation 等文字描述字段。请勿包含力量、敏捷、HP 等任何数值属性，这些将由本地规则引擎生成)
-            - bio: 一段简短的角色背景描述 (Markdown 格式)
-            - items: 初始装备列表，每个物品为一个 JSON 对象，包含 [name, description, category, modifiers]。
-              D&D 武器 modifiers 必须使用字符串值：attack_ability(STR/DEX/FINESSE)、proficient、attack_bonus、damage_formula、damage_ability、damage_bonus、damage_type；可选 targeting(SINGLE/MULTIPLE/ALL_ENEMIES) 与 max_targets。
-              D&D 法术 category 使用“法术”，modifiers 必须包含 resolution_type(ATTACK/SAVING_THROW/AUTOMATIC/HEALING)、slot_level(戏法为0)，仪式法术另设 ritual=true；并按类型提供 ability、attack_bonus、save_ability、save_dc、damage_formula、damage_type、half_on_save 或 healing_formula；多目标法术使用 targeting=MULTIPLE/ALL_ENEMIES，可用 max_targets 限制数量。
-              不要只把伤害骰写进 description；规则字段缺失的武器和法术无法由本地裁决器使用。
+            为 [$rulesetId] 规则生成一份简洁的 TRPG 角色叙事草案。
+            用户描述：$description
+            字段约束：$basePromptInjection
 
-            JSON 示例：{"name":"示例角色","stats":{"race":"人类","class":"调查员"},"bio":"一段简短背景。","items":[]}
-            
-            请直接返回 JSON 对象，不要包含多余的文字说明。"""
+            必须只返回一个 JSON 对象：
+            {"name":"角色姓名","stats":{"叙事字段ID":"简短文本"},"bio":"简短背景","items":[...]}
+
+            name、stats 和 bio 只写叙事内容。数值属性、生命值、骰点、技能数值、
+            必须由本地规则系统处理。items 只列 3–5 件核心初始武器、护甲、工具或普通物品，
+            不要列法术、能力或整套物品包；名称不超过 20 字，描述不超过 60 字。
+            每件物品必须有 name、description、category、modifiers。普通物品 modifiers={}；
+            武器 modifiers 至少包含 damage_formula 与 damage_type，可再提供 attack_ability、
+            proficient、damage_ability 和 targeting。不要填写由角色属性计算的攻击或伤害加值。
+            不要解释、不要展示思考过程、不要使用 Markdown 代码块。""".trimIndent()
         val model = keyManager.getModel()
         val messages = listOf(ChatMessage("user", prompt))
         val primaryProtocol = determineProtocol(baseUrl)
@@ -717,9 +760,12 @@ class LlmRepositoryImpl(
             val requestMessages = if (formatRetryCount == 0) {
                 messages
             } else {
-                messages + ChatMessage(
-                    role = "user",
-                    content = "上一条响应为空或不是合法 json。请只重新返回一个完整 JSON 对象，不要解释。"
+                listOf(
+                    ChatMessage(
+                        role = "user",
+                        content = prompt + "\n上一条响应被截断或格式无效。" +
+                            "本次必须省略分析，保持 bio 和装备描述简短，并立即输出完整 JSON。"
+                    )
                 )
             }
             val request = try {
@@ -771,6 +817,9 @@ class LlmRepositoryImpl(
                                 return
                             }
 
+                            nonStreamingCompletionFailure(protocol, body)?.let { failure ->
+                                throw LlmResponseFormatException(failure)
+                            }
                             val content = extractResponseText(protocol, body)
                             val character = json.decodeFromString<xyz.sakulik.d20.app.data.model.CharacterGenResponse>(
                                 extractJsonObject(content)
@@ -815,20 +864,25 @@ class LlmRepositoryImpl(
 
     private data class StructuredOutputSpec(
         val name: String,
-        val schema: JsonObject
+        val schema: JsonObject,
+        val outputTokenLimit: Int = DEFAULT_OUTPUT_TOKEN_LIMIT
     )
 
     private companion object {
         val TURN_OUTPUT_SPEC = StructuredOutputSpec("trpg_turn_response", AiResponseSchema.value)
         val CHARACTER_OUTPUT_SPEC = StructuredOutputSpec(
             "trpg_character_response",
-            CharacterGenResponseSchema.value
+            CharacterGenResponseSchema.value,
+            outputTokenLimit = CHARACTER_OUTPUT_TOKEN_LIMIT
         )
         val STRUCTURED_OUTPUT_FALLBACK_CODES = setOf(400, 404, 405, 415, 422)
         val CHAT_SUCCESS_FINISH_REASONS = setOf("stop")
+        val ANTHROPIC_SUCCESS_STOP_REASONS = setOf("end_turn", "stop_sequence", "tool_use")
         val RESPONSES_FAILURE_EVENTS = setOf("response.incomplete", "response.failed", "error")
         const val LLM_TRAFFIC_TAG = "LlmTraffic"
         const val LOGCAT_CHUNK_SIZE = 3_500
+        const val DEFAULT_OUTPUT_TOKEN_LIMIT = 4_096
+        const val CHARACTER_OUTPUT_TOKEN_LIMIT = 8_192
     }
 }
 
@@ -843,7 +897,8 @@ internal object AnthropicMessagesAdapter {
         model: String,
         messages: List<ChatMessage>,
         stream: Boolean,
-        outputFormat: AnthropicOutputFormat?
+        outputFormat: AnthropicOutputFormat?,
+        maxTokens: Int = 4_096
     ): AnthropicRequest {
         val systemPrompt = messages.filter { it.role == "system" }
             .joinToString("\n\n") { it.content }
@@ -853,7 +908,7 @@ internal object AnthropicMessagesAdapter {
             model = model,
             messages = conversation,
             system = systemPrompt.ifBlank { null },
-            maxTokens = 4096,
+            maxTokens = maxTokens,
             stream = stream,
             outputConfig = outputFormat?.let(::AnthropicOutputConfig)
         )

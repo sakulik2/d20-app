@@ -18,6 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import xyz.sakulik.d20.app.data.model.CharacterGenState
 import xyz.sakulik.d20.app.data.model.ChatMessage
 import xyz.sakulik.d20.app.data.model.StreamState
 import xyz.sakulik.d20.app.data.security.ApiProtocol
@@ -83,6 +84,59 @@ class DeepSeekCompatibilityTest {
         assertTrue(completed.response.gameEvents.isEmpty())
     }
 
+    @Test
+    fun characterGenerationRetriesTruncatedReasoningWithCompactEquipmentPrompt() = runBlocking {
+        val capturedBodies = mutableListOf<String>()
+        var responseIndex = 0
+        val client = OkHttpClient.Builder()
+            .addInterceptor(Interceptor { chain ->
+                val request = chain.request()
+                capturedBodies += Buffer().also { request.body?.writeTo(it) }.readUtf8()
+                val body = if (responseIndex++ == 0) {
+                    TRUNCATED_CHARACTER_RESPONSE
+                } else {
+                    COMPLETE_CHARACTER_RESPONSE
+                }
+                Response.Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(body.toResponseBody("application/json".toMediaType()))
+                    .build()
+            })
+            .build()
+        val repository = LlmRepositoryImpl(DeepSeekKeyManager(), client)
+
+        val states = withTimeout(2_000) {
+            repository.generateCharacter(
+                baseUrl = "https://api.deepseek.com/v1",
+                description = "犬儒主义的精灵吟游诗人",
+                rulesetId = "dnd_5e",
+                promptInjection = "stats 只可使用 race、class、subclass 和 background。",
+            ).toList()
+        }
+
+        assertEquals(2, capturedBodies.size)
+        capturedBodies.forEach { body ->
+            val request = json.parseToJsonElement(body).jsonObject
+            assertEquals(8192, request.getValue("max_tokens").jsonPrimitive.content.toInt())
+            val prompt = request.getValue("messages").jsonArray.single()
+                .jsonObject.getValue("content").jsonPrimitive.content
+            assertTrue(prompt.contains("3–5 件核心初始"))
+            assertTrue(prompt.contains("不要列法术"))
+        }
+        assertTrue(
+            capturedBodies[1].contains("上一条响应被截断或格式无效")
+        )
+        assertEquals(2, states.size)
+        assertTrue(states.first() is CharacterGenState.Loading)
+        val success = states.last() as CharacterGenState.Success
+        assertEquals("凯伦", success.data.name)
+        assertEquals(1, success.data.items.size)
+        assertEquals("细剑", success.data.items.single().name)
+    }
+
     private class DeepSeekKeyManager : LlmKeyManager {
         override fun getKey(): String = "deepseek-test-key"
         override fun hasKey(): Boolean = true
@@ -108,6 +162,14 @@ class DeepSeekCompatibilityTest {
 
             data: [DONE]
 
+        """.trimIndent()
+
+        val TRUNCATED_CHARACTER_RESPONSE = """
+            {"choices":[{"message":{"role":"assistant","content":"","reasoning_content":"很长的分析"},"finish_reason":"length"}]}
+        """.trimIndent()
+
+        val COMPLETE_CHARACTER_RESPONSE = """
+            {"choices":[{"message":{"role":"assistant","content":"{\"name\":\"凯伦\",\"stats\":{\"race\":\"精灵\",\"class\":\"吟游诗人\"},\"bio\":\"讥讽虚伪的流浪诗人。\",\"items\":[{\"name\":\"细剑\",\"description\":\"轻巧的穿刺武器\",\"category\":\"武器\",\"modifiers\":{\"damage_formula\":\"1d8\",\"damage_type\":\"piercing\",\"attack_ability\":\"FINESSE\"}}]}","reasoning_content":"","finish_reason":"stop"}]}
         """.trimIndent()
     }
 }

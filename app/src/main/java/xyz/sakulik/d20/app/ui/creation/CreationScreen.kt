@@ -56,6 +56,11 @@ fun CreationScreen(
     CollectEvent(viewModel.uiEvent) { event ->
         when (event) {
             is CreationUiEvent.Success -> onSuccess()
+            is CreationUiEvent.Notice -> {
+                scope.launch {
+                    snackbarHostState.showSnackbar(event.message)
+                }
+            }
             is CreationUiEvent.Error -> {
                 scope.launch {
                     snackbarHostState.showSnackbar(event.message)
@@ -158,7 +163,7 @@ fun CreationScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("取消生成")
                     } else {
-                        Text("AI 自动生成全部信息")
+                        Text("AI 生成角色与初始装备")
                     }
                 }
             }

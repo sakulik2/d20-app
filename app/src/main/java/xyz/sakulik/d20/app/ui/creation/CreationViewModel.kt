@@ -42,6 +42,7 @@ data class CreationUiState(
 
 sealed class CreationUiEvent : UiEvent {
     object Success : CreationUiEvent()
+    data class Notice(val message: String) : CreationUiEvent()
     data class Error(val message: String) : CreationUiEvent()
 }
 
@@ -341,10 +342,21 @@ class CreationViewModel(
         val baseUrl = keyManager.getBaseUrl()
         val currentState = uiState.value
         val rid = currentState.rulesetId
-        val schemaPrompt = currentState.schema?.fields?.joinToString(", ") { "${it.label} (${it.id})" }
-        val ruleset = xyz.sakulik.d20.app.domain.rules.RulesetRegistry.getRuleset(context, rid)
-        val promptInjection = (ruleset?.getLlmContext() ?: "") + 
-                             "\n请务必包含以下核心属性：$schemaPrompt"
+        val narrativeFields = currentState.schema?.fields.orEmpty().filter { field ->
+            field is xyz.sakulik.d20.app.domain.rules.dynamic.StringInputField ||
+                field is xyz.sakulik.d20.app.domain.rules.dynamic.DropdownField
+        }
+        val narrativeFieldIds = narrativeFields.mapTo(mutableSetOf()) { it.id }
+        val promptInjection = narrativeFields.joinToString(", ") { field ->
+            if (field is xyz.sakulik.d20.app.domain.rules.dynamic.DropdownField) {
+                "${field.label} (${field.id}；可选：${field.options.joinToString("/")})"
+            } else {
+                "${field.label} (${field.id})"
+            }
+        }.let { fieldDescription ->
+            "stats 只可使用这些叙事字段：$fieldDescription。" +
+                "只填写适用于该角色的字段；不要输出点数、掷骰、生命值或其他数值字段。"
+        }
         val requestId = ++aiGenerationRequestId
         updateState { it.copy(isAiGenerating = true, error = null) }
         aiGenerationJob = viewModelScope.launch {
@@ -354,7 +366,7 @@ class CreationViewModel(
                         is xyz.sakulik.d20.app.data.model.CharacterGenState.Loading -> Unit
                         is xyz.sakulik.d20.app.data.model.CharacterGenState.Success -> {
                             val narrativeStats = state.data.stats.filterKeys {
-                                it in listOf("race", "subrace", "class", "subclass", "background", "occupation")
+                                it in narrativeFieldIds
                             }.mapValues { (_, value) ->
                                 if (value is JsonPrimitive) value.content else value.toString().removeSurrounding("\"")
                             }.toMutableMap()
@@ -362,6 +374,9 @@ class CreationViewModel(
                             if (!narrativeStats.containsKey("name")) {
                                 narrativeStats["name"] = state.data.name
                             }
+                            val generatedItems = state.data.items.take(MAX_AI_GENERATED_ITEMS)
+                                .mapNotNull(::sanitizeGeneratedItem)
+                            val rejectedItemCount = state.data.items.size - generatedItems.size
 
                             updateState { prev ->
                                 val baseStats = prev.stats.toMutableMap()
@@ -372,8 +387,16 @@ class CreationViewModel(
                                     characterName = state.data.name,
                                     stats = baseStats,
                                     bio = state.data.bio,
-                                    generatedItems = state.data.items,
+                                    generatedItems = generatedItems,
                                     remainingPoints = 0
+                                )
+                            }
+
+                            if (rejectedItemCount > 0) {
+                                sendEvent(
+                                    CreationUiEvent.Notice(
+                                        "AI 返回的 $rejectedItemCount 件规则装备不可用，已自动忽略"
+                                    )
                                 )
                             }
 
@@ -402,6 +425,38 @@ class CreationViewModel(
         aiGenerationJob?.cancel()
         aiGenerationJob = null
         updateState { it.copy(isAiGenerating = false, error = null) }
+    }
+
+    private fun sanitizeGeneratedItem(
+        item: xyz.sakulik.d20.app.data.model.ItemGenModel
+    ): xyz.sakulik.d20.app.data.model.ItemGenModel? {
+        val sanitized = item.copy(
+            name = item.name.trim().take(40),
+            description = item.description.trim().take(120),
+            category = item.category.trim().take(20).ifBlank { "道具" },
+            modifiers = item.modifiers.entries.take(10).associate { it.toPair() }
+        )
+        if (sanitized.name.isBlank()) return null
+        val draft = ItemEntity(
+            id = "ai-draft",
+            campaignId = uiState.value.campaignId,
+            name = sanitized.name,
+            description = sanitized.description,
+            category = sanitized.category,
+            modifiers = sanitized.modifiers.mapValues { (_, value) ->
+                if (value is JsonPrimitive) value.content else value.toString().removeSurrounding("\"")
+            },
+            isEquipped = true
+        )
+        val isWeapon = sanitized.category.contains("武器", ignoreCase = true) ||
+            sanitized.category.contains("weapon", ignoreCase = true)
+        val isSpell = sanitized.category.contains("法术", ignoreCase = true) ||
+            sanitized.category.contains("spell", ignoreCase = true)
+        return when {
+            isWeapon && draft.toWeaponProfileOrNull() == null -> null
+            isSpell -> null
+            else -> sanitized
+        }
     }
 
     /**
@@ -579,5 +634,9 @@ class CreationViewModel(
     fun removeCustomItem(item: xyz.sakulik.d20.app.data.model.ItemGenModel) {
         val updatedList = uiState.value.generatedItems - item
         updateState { it.copy(generatedItems = updatedList) }
+    }
+
+    private companion object {
+        const val MAX_AI_GENERATED_ITEMS = 5
     }
 }
