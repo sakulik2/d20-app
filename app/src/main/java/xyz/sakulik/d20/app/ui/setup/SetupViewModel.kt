@@ -75,11 +75,19 @@ class SetupViewModel(
         updateState { it.copy(selectedRulesetId = systemId) }
     }
 
+    fun onNavigationHandled() {
+        updateState { state ->
+            if (state.isLoading) state.copy(isLoading = false) else state
+        }
+    }
+
     /**
      * 开始冒险：保存 Key 并创建新剧本
      */
     fun startAdventure(campaignTitle: String) {
         val state = uiState.value
+        if (state.isLoading) return
+
         val apiKey = state.apiKey.trim()
         val baseUrl = state.baseUrl.trim().trimEnd('/')
         val model = state.model.trim()
@@ -99,10 +107,9 @@ class SetupViewModel(
             return
         }
 
+        updateState { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             try {
-                updateState { it.copy(isLoading = true, error = null) }
- 
                 // 1. 安全保存 Key 和 Base URL (仅当显示时)
                 if (state.showApiConfig) {
                     keyManager.saveKey(apiKey)

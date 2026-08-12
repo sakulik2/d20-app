@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,12 +26,18 @@ fun SetupScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
-    var campaignTitle by remember { mutableStateOf("") }
+    var campaignTitle by rememberSaveable { mutableStateOf("") }
 
     // 处理一次性导航事件
     xyz.sakulik.d20.app.ui.base.CollectEvent(viewModel.uiEvent) { event ->
         when (event) {
-            is SetupUiEvent.NavigateToWorldBuilder -> onNavigateToWorldBuilder(event.campaignId, event.rulesetId)
+            is SetupUiEvent.NavigateToWorldBuilder -> {
+                try {
+                    onNavigateToWorldBuilder(event.campaignId, event.rulesetId)
+                } finally {
+                    viewModel.onNavigationHandled()
+                }
+            }
         }
     }
 
