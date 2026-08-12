@@ -1,6 +1,7 @@
 package xyz.sakulik.d20.app.ui.settings
 
 import xyz.sakulik.d20.app.BuildConfig
+import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 import xyz.sakulik.d20.app.data.security.ApiProtocol
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
 import xyz.sakulik.d20.app.ui.base.BaseViewModel
@@ -12,7 +13,7 @@ data class SettingsUiState(
     val baseUrl: String = "",
     val model: String = "",
     val apiProtocol: String = "DEFAULT",
-    val maxHistoryTurns: Int = 8,
+    val maxHistoryTurns: Int = ConversationMemoryPolicy.DEFAULT_RECENT_TURNS,
     val isPasswordVisible: Boolean = false,
     val isSaved: Boolean = false,
     val error: String? = null
@@ -53,7 +54,13 @@ class SettingsViewModel(
     }
 
     fun onMaxHistoryTurnsChange(newTurns: Int) {
-        updateState { it.copy(maxHistoryTurns = newTurns, isSaved = false, error = null) }
+        updateState {
+            it.copy(
+                maxHistoryTurns = ConversationMemoryPolicy.sanitizeRecentTurns(newTurns),
+                isSaved = false,
+                error = null
+            )
+        }
     }
 
     fun togglePasswordVisibility() {

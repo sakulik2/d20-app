@@ -3,6 +3,7 @@ package xyz.sakulik.d20.app.data.security
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 
 enum class ApiProtocol {
     DEFAULT,
@@ -57,7 +58,6 @@ class EncryptedLlmKeyManager(context: Context) : LlmKeyManager {
         private const val KEY_MAX_HISTORY_TURNS = "max_history_turns"
         private const val DEFAULT_BASE_URL = "https://api.openai.com"
         private const val DEFAULT_MODEL = "gpt-5.5"
-        private const val DEFAULT_MAX_HISTORY_TURNS = 8
     }
 
     override fun saveKey(key: String) {
@@ -122,11 +122,18 @@ class EncryptedLlmKeyManager(context: Context) : LlmKeyManager {
 
     override fun saveMaxHistoryTurns(turns: Int) {
         sharedPreferences.edit()
-            .putInt(KEY_MAX_HISTORY_TURNS, turns.coerceIn(4, 30))
+            .putInt(
+                KEY_MAX_HISTORY_TURNS,
+                ConversationMemoryPolicy.sanitizeRecentTurns(turns)
+            )
             .apply()
     }
 
     override fun getMaxHistoryTurns(): Int {
-        return sharedPreferences.getInt(KEY_MAX_HISTORY_TURNS, DEFAULT_MAX_HISTORY_TURNS)
+        val saved = sharedPreferences.getInt(
+            KEY_MAX_HISTORY_TURNS,
+            ConversationMemoryPolicy.DEFAULT_RECENT_TURNS
+        )
+        return ConversationMemoryPolicy.sanitizeRecentTurns(saved)
     }
 }

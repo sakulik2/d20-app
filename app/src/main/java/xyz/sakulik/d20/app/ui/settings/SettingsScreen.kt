@@ -14,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 import xyz.sakulik.d20.app.ui.base.CollectEvent
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -190,24 +192,52 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("上下文历史轮数", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "${uiState.maxHistoryTurns} 轮",
+                            text = "近期原文回合",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "${uiState.maxHistoryTurns} 轮 · 约 ${ConversationMemoryPolicy.recentCharacterBudget(uiState.maxHistoryTurns) / 1000} 千字",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = MaterialTheme.colorScheme.secondary,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.weight(1.4f)
                         )
                     }
 
                     Slider(
                         value = uiState.maxHistoryTurns.toFloat(),
                         onValueChange = { viewModel.onMaxHistoryTurnsChange(it.toInt()) },
-                        valueRange = 4f..20f,
-                        steps = 15
+                        valueRange = ConversationMemoryPolicy.MIN_RECENT_TURNS.toFloat()..
+                            ConversationMemoryPolicy.MAX_RECENT_TURNS.toFloat(),
+                        steps = 9
                     )
 
                     Text(
-                        "保留最近的完整对话回合；较早内容会生成本地提取式摘要，世界书按当前对话相关性召回。数值越大越连贯，但消耗更多上下文。",
+                        "这里只控制逐字发送给模型的近期完整回合。较早对话不会删除，而会进入本地提取式摘要。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+
+                    HorizontalDivider()
+
+                    MemoryFeatureRow(
+                        label = "较早对话",
+                        value = "自动摘要 · 最多 ${ConversationMemoryPolicy.SUMMARY_CHARACTER_BUDGET / 1000} 千字"
+                    )
+                    MemoryFeatureRow(
+                        label = "世界书",
+                        value = "最多 ${ConversationMemoryPolicy.LORE_MAX_ENTRIES} 条 · ${ConversationMemoryPolicy.LORE_CHARACTER_BUDGET / 1000} 千字"
+                    )
+                    MemoryFeatureRow(
+                        label = "聊天原文",
+                        value = "本地数据库完整保留"
+                    )
+
+                    Text(
+                        "数值越大，近期细节越完整，但请求更慢且消耗更多 Token；摘要和世界书会在字符预算内自动补充长期信息。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
@@ -267,6 +297,28 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun MemoryFeatureRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1.6f)
+        )
     }
 }
 

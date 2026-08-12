@@ -1,14 +1,15 @@
 package xyz.sakulik.d20.app.data.repository
 
 import xyz.sakulik.d20.app.data.local.LoreEntryEntity
+import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 
 internal object LoreRetrievalPlanner {
     fun select(
         entries: List<LoreEntryEntity>,
         userText: String,
         recentMessages: List<MemoryMessage>,
-        maxEntries: Int = DEFAULT_MAX_ENTRIES,
-        characterBudget: Int = DEFAULT_CHARACTER_BUDGET
+        maxEntries: Int = ConversationMemoryPolicy.LORE_MAX_ENTRIES,
+        characterBudget: Int = ConversationMemoryPolicy.LORE_CHARACTER_BUDGET
     ): List<LoreEntryEntity> {
         if (entries.isEmpty() || characterBudget <= 0 || maxEntries <= 0) return emptyList()
         val currentText = userText.normalizeForRetrieval()
@@ -61,8 +62,6 @@ internal object LoreRetrievalPlanner {
         val score: Int
     )
 
-    private const val DEFAULT_MAX_ENTRIES = 5
-    private const val DEFAULT_CHARACTER_BUDGET = 4_000
     private const val RECENT_MESSAGE_LIMIT = 4
     private const val MIN_KEYWORD_LENGTH = 2
     private val KEYWORD_SEPARATOR = Regex("[,，;；\\n\\r]+")

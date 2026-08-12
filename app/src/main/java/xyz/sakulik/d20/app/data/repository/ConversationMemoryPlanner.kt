@@ -1,6 +1,7 @@
 package xyz.sakulik.d20.app.data.repository
 
 import kotlin.math.ceil
+import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 
 internal data class MemoryMessage(
     val id: Long,
@@ -17,8 +18,8 @@ internal object ConversationMemoryPlanner {
     fun plan(
         messages: List<MemoryMessage>,
         maxTurns: Int,
-        recentCharacterBudget: Int = DEFAULT_RECENT_CHARACTER_BUDGET,
-        summaryCharacterBudget: Int = DEFAULT_SUMMARY_CHARACTER_BUDGET
+        recentCharacterBudget: Int = ConversationMemoryPolicy.recentCharacterBudget(maxTurns),
+        summaryCharacterBudget: Int = ConversationMemoryPolicy.SUMMARY_CHARACTER_BUDGET
     ): ConversationContextPlan {
         val normalized = messages
             .asSequence()
@@ -123,8 +124,6 @@ internal object ConversationMemoryPlanner {
         else -> ""
     }
 
-    private const val DEFAULT_RECENT_CHARACTER_BUDGET = 12_000
-    private const val DEFAULT_SUMMARY_CHARACTER_BUDGET = 5_000
     private const val SUMMARY_ENTRY_TARGET_LENGTH = 160
     private const val MAX_SUMMARY_ENTRY_LENGTH = 180
     private const val RECENT_OLDER_MESSAGES = 8

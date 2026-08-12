@@ -10,6 +10,7 @@ import xyz.sakulik.d20.app.data.local.CombatantDao
 import xyz.sakulik.d20.app.data.local.CombatSessionDao
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
 import xyz.sakulik.d20.app.data.model.ChatMessage
+import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 import xyz.sakulik.d20.app.domain.rules.RulesetRegistry
 import xyz.sakulik.d20.app.domain.common.updater.PluginRepository
 import xyz.sakulik.d20.app.domain.worldview.LEGACY_WORLDVIEW_PROMPT_PENDING
@@ -40,7 +41,9 @@ class ContextAssembler(
         campaignId: String = "default",
         contextLimit: Int? = null
     ): List<ChatMessage> {
-        val limit = contextLimit ?: (keyManager?.getMaxHistoryTurns() ?: 8)
+        val limit = contextLimit ?: (
+            keyManager?.getMaxHistoryTurns() ?: ConversationMemoryPolicy.DEFAULT_RECENT_TURNS
+        )
         val messages = mutableListOf<ChatMessage>()
 
         // 1. 获取当前角色与规则系统
