@@ -6,7 +6,6 @@ import xyz.sakulik.d20.app.domain.rules.dynamic.IRuleset
 import xyz.sakulik.d20.app.domain.rules.dynamic.RulesetProvider
 import xyz.sakulik.d20.app.domain.common.updater.PluginRepository
 import xyz.sakulik.d20.app.domain.common.updater.PluginType
-import java.io.IOException
 
 /**
  * 规则系统元数据，用于 UI 展示
@@ -53,26 +52,22 @@ object RulesetRegistry {
         }
 
         val repository = PluginRepository(context)
-        val jsonResult = repository.loadPluginJson(PluginType.RULESET, baseId) ?: return null
-
         return try {
-            val result = RulesetProvider.parseManifestDetailed(jsonResult.first)
-            val ruleset = (result as? RulesetProvider.ParseResult.Success)?.ruleset
-            if (ruleset != null && ruleset.id == baseId) {
+            val loaded = repository.loadFirstValid(PluginType.RULESET, baseId) { json ->
+                val result = RulesetProvider.parseManifestDetailed(json)
+                (result as? RulesetProvider.ParseResult.Success)
+                    ?.ruleset
+                    ?.takeIf { ruleset -> ruleset.id == baseId }
+            }
+            val ruleset = loaded?.value
+            if (ruleset != null) {
                 rulesetCache[id] = ruleset
                 // 兼容老映射
                 if (id == "coc_7e") rulesetCache["coc_7e_dynamic"] = ruleset
                 if (id == "dnd_5e") rulesetCache["dnd_5e_dynamic"] = ruleset
                 ruleset
             } else {
-                val reason = when {
-                    ruleset != null -> "manifest.id=${ruleset.id} 与文件名 $baseId.json 不一致"
-                    result is RulesetProvider.ParseResult.Invalid -> result.errors.joinToString {
-                        "${it.code}: ${it.message}"
-                    }
-                    else -> "未知解析错误"
-                }
-                Log.e("RulesetRegistry", "Ruleset $id rejected: $reason")
+                Log.e("RulesetRegistry", "Ruleset $id rejected: 没有通过完整契约的下载版或内置版")
                 null
             }
         } catch (e: Exception) {

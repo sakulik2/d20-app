@@ -50,9 +50,7 @@ class WorldBuilderViewModel(
         val allPluginIds = repository.listPluginIds(PluginType.WORLDVIEW)
         
         val pluginPresets = allPluginIds.mapNotNull { pluginId ->
-            repository.loadPluginJson(PluginType.WORLDVIEW, pluginId)?.let { 
-                WorldviewProvider.parseManifest(it.first)
-            }
+            WorldviewProvider.loadManifest(repository, pluginId)
         }.filter { it.compatibleRulesets.contains(rulesetId) || it.compatibleRulesets.contains("any") }
 
         // 2. 最终列表：系统内置 + 外部插件

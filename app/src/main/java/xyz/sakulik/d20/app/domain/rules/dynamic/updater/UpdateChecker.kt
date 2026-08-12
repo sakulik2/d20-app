@@ -1,5 +1,6 @@
 package xyz.sakulik.d20.app.domain.common.updater
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerializationException
@@ -15,7 +16,7 @@ class UpdateChecker(
     private val repository: PluginRepository,
     private val getLocalVersionLogic: (PluginType, String) -> String?
 ) {
-    private val jsonConfig = Json { ignoreUnknownKeys = true }
+    private val jsonConfig = Json { ignoreUnknownKeys = false }
 
     fun checkUpdates(type: PluginType, indexUrl: String): Flow<UpdateCheckResult> = flow {
         try {
@@ -50,8 +51,8 @@ class UpdateChecker(
                     output.toString(Charsets.UTF_8.name())
                 }
                 val remoteIndex = jsonConfig.decodeFromString<RemotePluginIndex>(jsonStr)
+                validateEntries(remoteIndex.plugins)
                 val relevantEntries = remoteIndex.plugins.filter { it.type == type }
-                validateEntries(relevantEntries)
                 val states = relevantEntries.map { entry ->
                     val hasLocal = repository.hasPlugin(type, entry.id)
                     if (!hasLocal) {
@@ -73,6 +74,8 @@ class UpdateChecker(
             } finally {
                 connection.disconnect()
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: SerializationException) {
             emit(UpdateCheckResult.Error("服务器索引格式无效"))
         } catch (e: IllegalArgumentException) {
@@ -96,13 +99,18 @@ class UpdateChecker(
     }
 
     private fun validateEntries(entries: List<RemotePluginEntry>) {
-        require(entries.map { it.id }.distinct().size == entries.size) {
-            "服务器索引包含重复插件 ID"
+        require(entries.size <= MAX_INDEX_ENTRIES) {
+            "服务器索引插件数量超过限制"
+        }
+        require(entries.map { it.type to it.id }.distinct().size == entries.size) {
+            "服务器索引包含重复的同类型插件 ID"
         }
         entries.forEach { entry ->
-            require(PLUGIN_ID.matches(entry.id)) { "规则包 ID 不合法：${entry.id}" }
+            require(isSafePluginId(entry.id)) { "插件 ID 不合法：${entry.id}" }
             parseVersion(entry.version)
-            require(SHA256.matches(entry.sha256)) { "${entry.id} 的 SHA-256 不合法" }
+            require(Sha256Digest.parseHex(entry.sha256) != null) {
+                "${entry.id} 的 SHA-256 不合法"
+            }
             val downloadUrl = URL(entry.downloadUrl)
             require(downloadUrl.protocol.equals("https", ignoreCase = true)) {
                 "${entry.id} 的下载地址必须使用 HTTPS"
@@ -120,9 +128,8 @@ class UpdateChecker(
 
     private companion object {
         const val MAX_INDEX_BYTES = 512 * 1024
-        val PLUGIN_ID = Regex("^[a-z][a-z0-9_]{1,63}$")
+        const val MAX_INDEX_ENTRIES = 500
         val SEMANTIC_VERSION = Regex("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$")
         val LEGACY_VERSION = Regex("^(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){0,2}$")
-        val SHA256 = Regex("^[a-fA-F0-9]{64}$")
     }
 }

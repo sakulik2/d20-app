@@ -12,7 +12,6 @@ import xyz.sakulik.d20.app.data.security.LlmKeyManager
 import xyz.sakulik.d20.app.data.model.ChatMessage
 import xyz.sakulik.d20.app.domain.rules.RulesetRegistry
 import xyz.sakulik.d20.app.domain.common.updater.PluginRepository
-import xyz.sakulik.d20.app.domain.common.updater.PluginType
 import xyz.sakulik.d20.app.domain.worldview.WorldviewProvider
 
 /**
@@ -73,7 +72,7 @@ class ContextAssembler(
         // 4. 注入规则层与世界设定 (第一层 System Message)
         val worldview = campaign.worldviewId?.let { wvId ->
             val repo = PluginRepository(context)
-            repo.loadPluginJson(PluginType.WORLDVIEW, wvId)?.let { WorldviewProvider.parseManifest(it.first) }
+            WorldviewProvider.loadManifest(repo, wvId)
         }
 
         val worldSetting = """

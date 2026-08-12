@@ -1,8 +1,16 @@
 package xyz.sakulik.d20.app.domain.common.updater
 
 import android.content.Context
+import android.util.Log
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
+data class LoadedPlugin<T>(
+    val value: T,
+    val fromManagedInstallation: Boolean
+)
 
 /**
  * 通用插件仓库 (Ruleset & Worldview)
@@ -21,58 +29,75 @@ class PluginRepository(private val context: Context) {
         }
     }
 
-    /**
-     * 加载插件 JSON
-     * @return Pair<JSON文本, 是否为沙盒版本>
-     */
-    fun loadPluginJson(type: PluginType, id: String): Pair<String, Boolean>? {
-        val filename = "$id.json"
-        
-        // 1. 尝试沙盒
-        val sandboxFile = File(getPluginDir(type), filename)
-        if (isManagedInstallation(type, id) && sandboxFile.exists() && sandboxFile.canRead()) {
-            try {
-                val json = sandboxFile.readText()
-                if (json.isNotBlank() && isValidJson(json)) {
-                    return Pair(json, true)
-                }
-            } catch (_: Exception) {}
+    fun <T> loadFirstValid(
+        type: PluginType,
+        id: String,
+        parse: (String) -> T?
+    ): LoadedPlugin<T>? {
+        if (!isSafePluginId(id)) return null
+        val sandboxFile = getSandboxFile(type, id)
+        if (isManagedInstallation(type, id)) {
+            val managedValue = if (sandboxFile.isFile && sandboxFile.canRead()) {
+                runCatching { parse(sandboxFile.readText()) }.getOrNull()
+            } else {
+                null
+            }
+            if (managedValue != null) {
+                return LoadedPlugin(managedValue, fromManagedInstallation = true)
+            }
+            quarantineManagedInstallation(type, id)
         }
 
-        // 2. 降级 Assets
-        return try {
-            val json = context.assets.open("${type.dirName}/$filename").bufferedReader().use { it.readText() }
-            Pair(json, false)
-        } catch (e: IOException) {
-            null
-        }
+        val assetValue = runCatching {
+            context.assets.open("${type.dirName}/$id.json")
+                .bufferedReader()
+                .use { reader -> parse(reader.readText()) }
+        }.getOrNull()
+        return assetValue?.let { LoadedPlugin(it, fromManagedInstallation = false) }
     }
 
     fun hasPlugin(type: PluginType, id: String): Boolean {
+        if (!isSafePluginId(id)) return false
         val filename = "$id.json"
         return (
-            isManagedInstallation(type, id) && File(getPluginDir(type), filename).exists()
+            isManagedInstallation(type, id) && File(getPluginDir(type), filename).isFile
         ) || assetExists("${type.dirName}/$filename")
     }
 
     fun getSandboxFile(type: PluginType, id: String): File {
+        requireSafePluginId(id)
         return File(getPluginDir(type), "$id.json")
     }
 
     fun getTempFile(type: PluginType, id: String): File {
+        requireSafePluginId(id)
         return File(getPluginDir(type), "$id.tmp")
     }
 
     fun getBackupFile(type: PluginType, id: String): File {
+        requireSafePluginId(id)
         return File(getPluginDir(type), "$id.backup")
     }
 
+    fun getRejectedFile(type: PluginType, id: String): File {
+        requireSafePluginId(id)
+        return File(getPluginDir(type), "$id.rejected")
+    }
+
     fun registerManagedInstallation(type: PluginType, id: String): Boolean {
+        requireSafePluginId(id)
         val updated = managedInstallationIds(type).toMutableSet().apply { add(id) }
         return installationPreferences.edit().putStringSet(preferenceKey(type), updated).commit()
     }
 
+    fun unregisterManagedInstallation(type: PluginType, id: String): Boolean {
+        requireSafePluginId(id)
+        val updated = managedInstallationIds(type).toMutableSet().apply { remove(id) }
+        return installationPreferences.edit().putStringSet(preferenceKey(type), updated).commit()
+    }
+
     fun isManagedInstallation(type: PluginType, id: String): Boolean {
+        if (!isSafePluginId(id)) return false
         return id in managedInstallationIds(type)
     }
 
@@ -83,7 +108,7 @@ class PluginRepository(private val context: Context) {
         val ids = mutableSetOf<String>()
         
         // 1. 只接纳下载器登记过的沙盒文件，不扫描任意 JSON
-        managedInstallationIds(type).forEach { id ->
+        managedInstallationIds(type).filter(::isSafePluginId).forEach { id ->
             if (File(getPluginDir(type), "$id.json").isFile) {
                 ids.add(id)
             }
@@ -112,9 +137,26 @@ class PluginRepository(private val context: Context) {
         }
     }
 
-    private fun isValidJson(content: String): Boolean {
-        val trimmed = content.trim()
-        return (trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    private fun quarantineManagedInstallation(type: PluginType, id: String) {
+        val sandboxFile = getSandboxFile(type, id)
+        val rejectedFile = getRejectedFile(type, id)
+        if (sandboxFile.isFile) {
+            runCatching {
+                Files.move(
+                    sandboxFile.toPath(),
+                    rejectedFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }.onFailure { error ->
+                Log.e("PluginRepository", "无法隔离损坏的受控包 ${type.name}/$id", error)
+                sandboxFile.delete()
+            }
+        } else if (sandboxFile.exists()) {
+            Log.e("PluginRepository", "受控包路径不是普通文件 ${type.name}/$id")
+        }
+        if (!unregisterManagedInstallation(type, id)) {
+            Log.e("PluginRepository", "无法撤销损坏受控包登记 ${type.name}/$id")
+        }
     }
 
 

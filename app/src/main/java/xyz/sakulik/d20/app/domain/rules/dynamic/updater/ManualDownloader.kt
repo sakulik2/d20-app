@@ -1,6 +1,8 @@
 package xyz.sakulik.d20.app.domain.common.updater
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -12,7 +14,6 @@ import java.net.URL
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import xyz.sakulik.d20.app.domain.rules.dynamic.RulesetProvider
 import xyz.sakulik.d20.app.domain.worldview.WorldviewProvider
 
@@ -33,12 +34,21 @@ class ManualDownloader(private val repository: PluginRepository) {
     ): Flow<DownloadState> = flow {
         emit(DownloadState.Progress(0f))
 
+        if (!isSafePluginId(entry.id)) {
+            emit(DownloadState.Error("插件 ID 不合法：${entry.id}"))
+            return@flow
+        }
+
         val tempFile = repository.getTempFile(entry.type, entry.id)
         val finalFile = repository.getSandboxFile(entry.type, entry.id)
         val backupFile = repository.getBackupFile(entry.type, entry.id)
+        var installationStarted = false
 
         try {
-            require(PLUGIN_ID.matches(entry.id)) { "插件 ID 不合法" }
+            recoverInterruptedInstallation(finalFile, backupFile)
+            tempFile.delete()
+            val expectedSha256 = Sha256Digest.parseHex(entry.sha256)
+                ?: throw IllegalArgumentException("${entry.id} 的 SHA-256 不合法")
             val url = URL(entry.downloadUrl)
             require(url.protocol.equals("https", ignoreCase = true)) { "下载地址必须使用 HTTPS" }
             val connection = url.openConnection() as HttpURLConnection
@@ -60,6 +70,7 @@ class ManualDownloader(private val repository: PluginRepository) {
                 val output = FileOutputStream(tempFile)
 
                 val data = ByteArray(4096)
+                val sha256 = Sha256Accumulator()
                 var total = 0L
                 var count: Int
                 var lastPercent = 0f
@@ -71,6 +82,7 @@ class ManualDownloader(private val repository: PluginRepository) {
                             if (total > MAX_PLUGIN_BYTES) {
                                 throw IllegalArgumentException("下载文件超过 2 MiB 限制")
                             }
+                            sha256.update(data, 0, count)
                             outStream.write(data, 0, count)
                             if (fileLength > 0) {
                                 val percent = (total * 100f / fileLength).coerceAtMost(99f)
@@ -82,15 +94,11 @@ class ManualDownloader(private val repository: PluginRepository) {
                         }
                     }
                 }
+                if (!expectedSha256.matches(sha256.finish())) {
+                    throw IllegalArgumentException("SHA-256 校验失败：下载内容与索引摘要不一致")
+                }
             } finally {
                 connection.disconnect()
-            }
-
-            val actualSha256 = calculateSHA256(tempFile)
-            if (!actualSha256.equals(entry.sha256, ignoreCase = true)) {
-                tempFile.delete()
-                emit(DownloadState.Error("SHA-256 校验失败"))
-                return@flow
             }
 
             val manifestError = validateManifest(entry, tempFile.readText())
@@ -100,20 +108,29 @@ class ManualDownloader(private val repository: PluginRepository) {
                 return@flow
             }
 
+            installationStarted = true
             installValidatedFile(tempFile, finalFile, backupFile)
             if (!repository.registerManagedInstallation(entry.type, entry.id)) {
                 restoreBackup(finalFile, backupFile)
                 emit(DownloadState.Error("无法登记受控安装，已恢复原版本"))
                 return@flow
             }
+            repository.getRejectedFile(entry.type, entry.id).delete()
             backupFile.delete()
 
-            onSuccess(entry.id)
+            runCatching { onSuccess(entry.id) }
+                .onFailure { error ->
+                    Log.w(TAG, "插件已安装，但安装后刷新失败：${entry.type.name}/${entry.id}", error)
+                }
             emit(DownloadState.Success)
 
+        } catch (error: CancellationException) {
+            if (tempFile.exists()) tempFile.delete()
+            if (installationStarted && backupFile.exists()) restoreBackup(finalFile, backupFile)
+            throw error
         } catch (e: Exception) {
             if (tempFile.exists()) tempFile.delete()
-            if (backupFile.exists()) restoreBackup(finalFile, backupFile)
+            if (installationStarted && backupFile.exists()) restoreBackup(finalFile, backupFile)
             emit(DownloadState.Error(e.message ?: "下载或安装失败"))
         }
     }.flowOn(Dispatchers.IO)
@@ -154,6 +171,15 @@ class ManualDownloader(private val repository: PluginRepository) {
         }
     }
 
+    private fun recoverInterruptedInstallation(finalFile: File, backupFile: File) {
+        if (!backupFile.exists()) return
+        if (finalFile.exists()) {
+            backupFile.delete()
+        } else {
+            restoreBackup(finalFile, backupFile)
+        }
+    }
+
     private fun restoreBackup(finalFile: File, backupFile: File) {
         if (!backupFile.exists()) {
             finalFile.delete()
@@ -176,20 +202,8 @@ class ManualDownloader(private val repository: PluginRepository) {
         }
     }
 
-    private fun calculateSHA256(file: File): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(8192)
-            var read: Int
-            while (input.read(buffer).also { read = it } > 0) {
-                md.update(buffer, 0, read)
-            }
-        }
-        return md.digest().joinToString("") { "%02x".format(it) }
-    }
-
     private companion object {
+        const val TAG = "ManualDownloader"
         const val MAX_PLUGIN_BYTES = 2L * 1024 * 1024
-        val PLUGIN_ID = Regex("^[a-z][a-z0-9_]{1,63}$")
     }
 }

@@ -2,6 +2,20 @@ package xyz.sakulik.d20.app.domain.common.updater
 
 import kotlinx.serialization.Serializable
 
+private val SAFE_PLUGIN_ID = Regex("^[a-z][a-z0-9_]{1,63}$")
+
+internal fun isSafePluginId(id: String): Boolean = SAFE_PLUGIN_ID.matches(id)
+
+internal fun requireSafePluginId(id: String) {
+    require(isSafePluginId(id)) { "插件 ID 不合法：$id" }
+}
+
+internal fun isSupportedPluginVersion(version: String): Boolean {
+    return PLUGIN_VERSION.matches(version)
+}
+
+private val PLUGIN_VERSION = Regex("^(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){0,2}$")
+
 enum class PluginType(val dirName: String) {
     RULESET("rulesets"),
     WORLDVIEW("worldviews")

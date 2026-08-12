@@ -20,6 +20,7 @@ keystore.properties
 # Local development and agent notes
 /AGENTS.md
 /issues.md
+/todo.md
 /.agents/
 /.codex/
 TODO.local.md

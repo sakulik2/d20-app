@@ -30,9 +30,7 @@ class PluginManagerViewModel(
         if (type == PluginType.RULESET) {
             RulesetRegistry.getRuleset(application, id)?.version
         } else {
-            localRepo.loadPluginJson(type, id)?.first
-                ?.let(WorldviewProvider::parseManifest)
-                ?.version
+            WorldviewProvider.loadManifest(localRepo, id)?.version
         }
     }
 
