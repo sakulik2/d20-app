@@ -1,0 +1,11 @@
+{
+    "id": "cthulhu_mythos",
+    "name": "克苏鲁迷雾",
+    "author": "System",
+    "version": "1.0",
+    "compatibleRulesets": ["coc_7e"],
+    "tags": ["恐怖", "解谜", "宇宙"],
+    "tone": "Cosmic Horror",
+    "coreSetting": "1920年代，昏暗的煤气灯下，不可名状的恐怖正在苏醒。凡人在这些古老存在面前微不足道，真相往往伴随着疯狂。",
+    "systemPromptPayload": "设定背景为克苏鲁神话。强调压抑、绝望的氛围。凡人永远无法理解全貌，探索过程就是理智流失的过程。侧重于解谜过程中的不安感和不可逃避的悲剧结局。"
+}

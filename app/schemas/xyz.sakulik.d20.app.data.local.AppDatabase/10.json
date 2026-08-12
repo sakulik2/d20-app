@@ -1,0 +1,596 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 10,
+    "identityHash": "73476b03ecab52a3e4d648d9c6b8c4f1",
+    "entities": [
+      {
+        "tableName": "campaigns",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `system_id` TEXT NOT NULL, `world_name` TEXT NOT NULL, `tone` TEXT NOT NULL, `core_setting` TEXT NOT NULL, `custom_rules` TEXT NOT NULL, `worldview_id` TEXT, `last_updated` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "systemId",
+            "columnName": "system_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "worldName",
+            "columnName": "world_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tone",
+            "columnName": "tone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coreSetting",
+            "columnName": "core_setting",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customRules",
+            "columnName": "custom_rules",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "worldviewId",
+            "columnName": "worldview_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastUpdated",
+            "columnName": "last_updated",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "characters",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `campaign_id` TEXT NOT NULL, `name` TEXT NOT NULL, `stats` TEXT NOT NULL, `active_system` TEXT NOT NULL, `inventory_json` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "campaignId",
+            "columnName": "campaign_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stats",
+            "columnName": "stats",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeSystem",
+            "columnName": "active_system",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inventory",
+            "columnName": "inventory_json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_characters_campaign_id",
+            "unique": false,
+            "columnNames": [
+              "campaign_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_characters_campaign_id` ON `${TABLE_NAME}` (`campaign_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "campaigns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "campaign_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "messages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `campaign_id` TEXT NOT NULL, `role` TEXT NOT NULL, `content` TEXT NOT NULL, `is_hidden` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, FOREIGN KEY(`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "campaignId",
+            "columnName": "campaign_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isHidden",
+            "columnName": "is_hidden",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_messages_campaign_id",
+            "unique": false,
+            "columnNames": [
+              "campaign_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_messages_campaign_id` ON `${TABLE_NAME}` (`campaign_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "campaigns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "campaign_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `campaign_id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `modifiers` TEXT NOT NULL, `is_equipped` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "campaignId",
+            "columnName": "campaign_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiers",
+            "columnName": "modifiers",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isEquipped",
+            "columnName": "is_equipped",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_items_campaign_id",
+            "unique": false,
+            "columnNames": [
+              "campaign_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_campaign_id` ON `${TABLE_NAME}` (`campaign_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "campaigns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "campaign_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "lore_entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `campaign_id` TEXT NOT NULL, `title` TEXT NOT NULL, `category` TEXT NOT NULL, `keywords` TEXT NOT NULL, `content` TEXT NOT NULL, `is_enabled` INTEGER NOT NULL, `last_updated` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "campaignId",
+            "columnName": "campaign_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keywords",
+            "columnName": "keywords",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isEnabled",
+            "columnName": "is_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdated",
+            "columnName": "last_updated",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_lore_entries_campaign_id",
+            "unique": false,
+            "columnNames": [
+              "campaign_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_lore_entries_campaign_id` ON `${TABLE_NAME}` (`campaign_id`)"
+          },
+          {
+            "name": "index_lore_entries_title",
+            "unique": false,
+            "columnNames": [
+              "title"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_lore_entries_title` ON `${TABLE_NAME}` (`title`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "campaigns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "campaign_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "combatants",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`campaign_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `initiative` INTEGER NOT NULL, `ac` INTEGER NOT NULL, `hp` INTEGER NOT NULL, `max_hp` INTEGER NOT NULL, `resistances` TEXT NOT NULL, `vulnerabilities` TEXT NOT NULL, `immunities` TEXT NOT NULL, `saving_throws` TEXT NOT NULL, `attributes` TEXT NOT NULL, PRIMARY KEY(`campaign_id`, `id`), FOREIGN KEY(`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "campaignId",
+            "columnName": "campaign_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "initiative",
+            "columnName": "initiative",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ac",
+            "columnName": "ac",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hp",
+            "columnName": "hp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxHp",
+            "columnName": "max_hp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resistances",
+            "columnName": "resistances",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vulnerabilities",
+            "columnName": "vulnerabilities",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "immunities",
+            "columnName": "immunities",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savingThrows",
+            "columnName": "saving_throws",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attributes",
+            "columnName": "attributes",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "campaign_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_combatants_campaign_id",
+            "unique": false,
+            "columnNames": [
+              "campaign_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_combatants_campaign_id` ON `${TABLE_NAME}` (`campaign_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "campaigns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "campaign_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "combat_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`campaign_id` TEXT NOT NULL, `round` INTEGER NOT NULL, `initiative_queue` TEXT NOT NULL, `current_turn_index` INTEGER NOT NULL, `ruleset_id` TEXT NOT NULL, `life_policy` TEXT NOT NULL, `participant_initiative` INTEGER NOT NULL, `turn_resources` TEXT NOT NULL, `defeat_at_zero_hp` INTEGER NOT NULL, PRIMARY KEY(`campaign_id`), FOREIGN KEY(`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "campaignId",
+            "columnName": "campaign_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "round",
+            "columnName": "round",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "initiativeQueue",
+            "columnName": "initiative_queue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentTurnIndex",
+            "columnName": "current_turn_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rulesetId",
+            "columnName": "ruleset_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lifePolicy",
+            "columnName": "life_policy",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "participantInitiative",
+            "columnName": "participant_initiative",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "turnResources",
+            "columnName": "turn_resources",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defeatAtZeroHp",
+            "columnName": "defeat_at_zero_hp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "campaign_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_combat_sessions_campaign_id",
+            "unique": false,
+            "columnNames": [
+              "campaign_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_combat_sessions_campaign_id` ON `${TABLE_NAME}` (`campaign_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "campaigns",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "campaign_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '73476b03ecab52a3e4d648d9c6b8c4f1')"
+    ]
+  }
+}

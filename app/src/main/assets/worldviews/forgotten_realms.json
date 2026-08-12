@@ -1,0 +1,11 @@
+{
+    "id": "forgotten_realms",
+    "name": "被遗忘的国度",
+    "author": "Ed Greenwood",
+    "version": "1.0",
+    "compatibleRulesets": ["dnd_5e"],
+    "tags": ["高魔", "经典奇幻", "多元种族"],
+    "tone": "Classic High Fantasy",
+    "coreSetting": "费伦大陆是一个充满了魔法、古老遗迹和强大实力的世界。从剑湾到内海，无数英雄在这里书写传奇。",
+    "systemPromptPayload": "设定背景为《被遗忘的国度》。这是一个典型的 D&D 世界，诸神真实存在并时常干预凡间。魔法不仅是力量，也是一种生活方式。强调各种族（人类、精灵、矮人、半身人）之间的文化差异，以及散塔林会、竖琴手同盟等组织的暗流涌动。"
+}

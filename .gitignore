@@ -1,0 +1,44 @@
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.navigation/
+captures/
+
+# Gradle and build output
+.gradle/
+build/
+**/build/
+
+# Local Android SDK and secrets
+local.properties
+*.jks
+*.keystore
+keystore.properties
+*.pem
+*.p12
+
+# Local development and agent notes
+/AGENTS.md
+/issues.md
+/.agents/
+/.codex/
+TODO.local.md
+NOTES.local.md
+
+# Native and generated files
+.cxx/
+.externalNativeBuild/
+*.apk
+*.aab
+
+# Editor and operating-system files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.backup
+*.orig

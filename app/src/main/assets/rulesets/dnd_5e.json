@@ -1,0 +1,372 @@
+{
+    "id": "dnd_5e",
+    "name": "龙与地下城 5E",
+    "description": "最伟大的奇幻冒险。经典 d20 规则体系。",
+    "version": "1.0",
+    "checkRules": {
+        "targetSource": "EVENT",
+    "modifierSource": "ABILITY_MODIFIER",
+    "equipmentBonusAppliesTo": "MODIFIER",
+    "equipmentBonusActionIds": ["dnd_check"],
+    "defaultActionId": "dnd_check",
+        "requiredTargetActionIds": ["dnd_check"],
+        "statAliases": {
+            "str": ["力量", "strength"],
+            "dex": ["敏捷", "dexterity"],
+            "con": ["体质", "constitution"],
+            "int": ["智力", "intelligence"],
+            "wis": ["感知", "wisdom"],
+            "cha": ["魅力", "charisma"]
+        },
+        "targetLabel": "DC"
+    },
+    "combatRules": {
+        "initiative": {
+            "diceExpression": "1d20",
+            "statKey": "dex",
+            "statTransform": "ABILITY_MODIFIER",
+            "defaultValue": 0,
+            "label": "玩家先攻"
+        },
+        "turnResources": {
+            "action": 1,
+            "bonus_action": 1,
+            "reaction": 1
+        },
+        "turnResourceLabels": {
+            "action": "行动",
+            "bonus_action": "附赠动作",
+            "reaction": "反应"
+        },
+        "actionCosts": {
+            "dnd_attack": { "action": 1 },
+            "dnd_cast": { "action": 1 }
+        },
+        "actionTimings": {
+            "dnd_attack": "PARTICIPANT_TURN",
+            "dnd_cast": "PARTICIPANT_TURN"
+        },
+        "primaryActionResource": "action",
+        "lifePolicy": "DND_5E",
+        "localActionHandler": "DND_5E",
+        "defeatAtZeroHp": true
+    },
+    "systemPromptInjection": {
+        "prompt": "你现在是一个《龙与地下城》第5版（DnD 5e）的地下城主（DM）。普通检定使用 require_roll/action_id=dnd_check，并提供 threshold 与 stat_id。攻击使用 action_id=dnd_attack 与 target_id；施法使用 action_id=dnd_cast 与可选 target_id。武器、法术、环级、命中、豁免、伤害与资源消耗均由本地规则档案裁决，不要编造 modifier、damage_formula 或 slot_level。target_id 必须来自此前 start_combat 中声明的稳定目标 ID。进入战斗时每个敌人提供 id、name、initiative、ac、hp、max_hp、saving_throws，以及可选 resistances、vulnerabilities、immunities。在创卡环节，请根据角色背景生成合适的背景和子职。"
+    },
+    "characterTemplate": {
+        "defaultStats": {
+            "hp": "10",
+            "max_hp": "10",
+            "ac": "12",
+            "str": "8",
+            "dex": "8",
+            "con": "8",
+            "int": "8",
+            "wis": "8",
+            "cha": "8",
+            "prof_bonus": "2",
+            "deathSaves": "{\"successes\": 0, \"failures\": 0, \"isStable\": false}",
+            "hit_dice": "{\"current\": 1, \"max\": 1, \"reset_on\": \"long_rest\"}",
+            "resources": "{\"spell_slots\": {\"level_1\": {\"current\": 4, \"max\": 4, \"reset_on\": \"long_rest\"}, \"level_2\": {\"current\": 2, \"max\": 2, \"reset_on\": \"long_rest\"}}, \"ki_points\": {\"current\": 0, \"max\": 0, \"reset_on\": \"short_rest\"}}",
+            "background": "",
+            "subclass": "",
+            "race": "",
+            "subrace": ""
+        }
+    },
+    "creationSchema": {
+        "totalPoints": 27,
+        "fields": [
+            {
+                "type": "string",
+                "id": "name",
+                "label": "角色姓名",
+                "required": true,
+                "hint": "给你的勇者起个名字"
+            },
+            {
+                "type": "dropdown",
+                "id": "race",
+                "label": "种族",
+                "options": [
+                    "人类",
+                    "精灵",
+                    "矮人",
+                    "半身人",
+                    "龙裔",
+                    "侏儒",
+                    "半精灵",
+                    "半奥克",
+                    "提夫林"
+                ]
+            },
+            {
+                "type": "dropdown",
+                "id": "subrace_dwarf",
+                "label": "子种族 (山脉/丘陵)",
+                "visibilityCondition": "race == '矮人'",
+                "options": [
+                    "山脉矮人",
+                    "丘陵矮人"
+                ]
+            },
+            {
+                "type": "dropdown",
+                "id": "subrace_elf",
+                "label": "子种族 (高精/木精/卓尔)",
+                "visibilityCondition": "race == '精灵'",
+                "options": [
+                    "高等精灵",
+                    "木精灵",
+                    "卓尔"
+                ]
+            },
+            {
+                "type": "dropdown",
+                "id": "subrace_halfling",
+                "label": "子种族 (轻足/壮健)",
+                "visibilityCondition": "race == '半身人'",
+                "options": [
+                    "轻足半身人",
+                    "壮健半身人"
+                ]
+            },
+            {
+                "type": "dropdown",
+                "id": "subrace_human",
+                "label": "子种族 (标准/变体)",
+                "visibilityCondition": "race == '人类'",
+                "options": [
+                    "标准人类",
+                    "变体人类"
+                ]
+            },
+            {
+                "type": "dropdown",
+                "id": "subrace_gnome",
+                "label": "子种族 (森林/岩石)",
+                "visibilityCondition": "race == '侏儒'",
+                "options": [
+                    "森林侏儒",
+                    "岩石侏儒"
+                ]
+            },
+            {
+                "type": "dropdown",
+                "id": "subrace_dragonborn",
+                "label": "巨龙血统",
+                "visibilityCondition": "race == '龙裔'",
+                "options": [
+                    "黑龙 (强硫酸)",
+                    "蓝龙 (强闪电)",
+                    "赤龙 (强火焰)",
+                    "绿龙 (强毒素)",
+                    "白龙 (强寒冷)",
+                    "黄铜龙 (强火焰)",
+                    "青铜龙 (强闪电)",
+                    "赤铜龙 (强酸)",
+                    "金龙 (强火焰)",
+                    "银龙 (强寒冷)"
+                ]
+            },
+            {
+                "type": "dropdown",
+                "id": "class",
+                "label": "职业",
+                "options": [
+                    "战士",
+                    "法师",
+                    "游侠",
+                    "牧师",
+                    "盗贼",
+                    "术士",
+                    "圣骑士",
+                    "德鲁伊",
+                    "野蛮人",
+                    "吟游诗人",
+                    "武僧",
+                    "邪术师"
+                ]
+            },
+            {
+                "type": "string",
+                "id": "subclass",
+                "label": "子职 (Subclass)",
+                "hint": "如：至高天誓约、狂放魔法、勇士等"
+            },
+            {
+                "type": "string",
+                "id": "background",
+                "label": "背景 (Background)",
+                "hint": "描述你的成长背景，如：落难贵族、隐居贤者等"
+            },
+            {
+                "type": "point_buy",
+                "id": "str",
+                "label": "力量 (STR)",
+                "min": 8,
+                "max": 20,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "dex",
+                "label": "敏捷 (DEX)",
+                "min": 8,
+                "max": 20,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "con",
+                "label": "体质 (CON)",
+                "min": 8,
+                "max": 20,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "int",
+                "label": "智力 (INT)",
+                "min": 8,
+                "max": 20,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "wis",
+                "label": "感知 (WIS)",
+                "min": 8,
+                "max": 20,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "cha",
+                "label": "魅力 (CHA)",
+                "min": 8,
+                "max": 20,
+                "costMultiplier": 1
+            },
+            {
+                "type": "dice_roll",
+                "id": "hp",
+                "label": "初始生命值",
+                "formula": "1d10+10"
+            }
+        ]
+    },
+    "uiBlueprint": {
+        "dicePanelType": "D20_CHECK",
+        "localizationTermMap": {
+            "dc": "挑战难度 (DC)",
+            "modifier": "加值",
+            "hp": "生命值",
+            "ac": "护甲等级",
+            "deathSaves": "死亡豁免"
+        }
+    },
+    "mechanicsPipeline": {
+        "entryNodeId": "branch_on_action",
+        "nodes": {
+            "branch_on_action": {
+                "type": "switch",
+                "variable": "intent:actionId",
+                "cases": {
+                    "dnd_death_save": "death_save_trigger"
+                },
+                "defaultNodeId": "check_roll_state"
+            },
+            "death_save_trigger": {
+                "type": "death_save",
+                "hpKey": "hp",
+                "deathSavesKey": "deathSaves",
+                "stableNodeId": "set_stable_status",
+                "failureNodeId": "set_dead_status",
+                "nextNodeId": null
+            },
+            "set_stable_status": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:SUCCESS",
+                "nextNodeId": null
+            },
+            "set_dead_status": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:CRITICAL_FAILURE",
+                "nextNodeId": null
+            },
+            "check_roll_state": {
+                "type": "switch",
+                "variable": "intent:roll_state",
+                "cases": {
+                    "ADVANTAGE": "roll_advantage",
+                    "DISADVANTAGE": "roll_disadvantage"
+                },
+                "defaultNodeId": "roll_normal"
+            },
+            "roll_advantage": {
+                "type": "roll",
+                "count": 2,
+                "faces": 20,
+                "keep": "KEEP_HIGHEST",
+                "outputVariable": "raw_roll",
+                "nextNodeId": "calc_total"
+            },
+            "roll_disadvantage": {
+                "type": "roll",
+                "count": 2,
+                "faces": 20,
+                "keep": "KEEP_LOWEST",
+                "outputVariable": "raw_roll",
+                "nextNodeId": "calc_total"
+            },
+            "roll_normal": {
+                "type": "roll",
+                "count": 1,
+                "faces": 20,
+                "keep": "KEEP_ALL",
+                "outputVariable": "raw_roll",
+                "nextNodeId": "calc_total"
+            },
+            "calc_total": {
+                "type": "math",
+                "leftOperandSource": "variable:raw_roll",
+                "operator": "+",
+                "rightOperandSource": "intent:modifier",
+                "outputVariable": "total_roll",
+                "nextNodeId": "check_dc"
+            },
+            "check_dc": {
+                "type": "condition",
+                "leftOperandSource": "variable:total_roll",
+                "operator": ">=",
+                "rightOperandSource": "intent:dc",
+                "trueNodeId": "set_success",
+                "falseNodeId": "set_failure"
+            },
+            "set_success": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:SUCCESS",
+                "nextNodeId": null
+            },
+            "set_failure": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:FAILURE",
+                "nextNodeId": null
+            }
+        }
+    }
+}

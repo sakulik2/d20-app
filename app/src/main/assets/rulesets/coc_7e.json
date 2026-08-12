@@ -1,0 +1,297 @@
+{
+    "id": "coc_7e",
+    "name": "克苏鲁的呼唤 7E",
+    "description": "探索未知的恐怖，百分骰 (d100) 理智规则。",
+    "version": "1.0",
+    "checkRules": {
+        "targetSource": "STAT_VALUE",
+    "modifierSource": "EVENT",
+    "equipmentBonusAppliesTo": "TARGET",
+    "equipmentBonusActionIds": ["coc_check"],
+    "defaultActionId": "coc_check",
+        "requiredTargetActionIds": ["coc_check"],
+        "statAliases": {
+            "str": ["力量", "strength"],
+            "dex": ["敏捷", "dexterity"],
+            "con": ["体质", "constitution"],
+            "int": ["智力", "intelligence"],
+            "pow": ["意志", "power"],
+            "san": ["理智", "sanity"]
+        },
+        "targetLabel": "目标值"
+    },
+    "combatRules": {
+        "initiative": {
+            "statKey": "dex",
+            "statTransform": "RAW_VALUE",
+            "defaultValue": 0,
+            "label": "行动顺序"
+        },
+        "lifePolicy": "NONE",
+        "defeatAtZeroHp": false
+    },
+    "systemPromptInjection": {
+        "prompt": "你现在是一个《克苏鲁的呼唤》第7版（CoC 7e）的守秘人（KP）。需要技能或属性检定时，只能在 game_events 中返回统一的 require_roll 事件，例如：{\"type\":\"require_roll\",\"action_id\":\"coc_check\",\"expression\":\"1d100\",\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用当前角色已有属性键。不要猜测 target_value，目标值由本地规则引擎从角色卡读取。在创卡环节，请务必根据角色描述生成合适的“职业”（Occupation）和“个人简介/背景”（Bio/Backstory）。"
+    },
+    "characterTemplate": {
+        "defaultStats": {
+            "hp": 10,
+            "mp": 10,
+            "san": 50,
+            "luck": 50,
+            "str": 50,
+            "dex": 50,
+            "con": 50,
+            "app": 50,
+            "pow": 50,
+            "siz": 50,
+            "int": 50,
+            "edu": 50,
+            "occupation": "",
+            "age": "25"
+        }
+    },
+    "creationSchema": {
+        "totalPoints": 460,
+        "fields": [
+            {
+                "type": "string",
+                "id": "name",
+                "label": "调查员姓名",
+                "required": true,
+                "hint": "输入调查员的名字"
+            },
+            {
+                "type": "string",
+                "id": "occupation",
+                "label": "职业 (Occupation)",
+                "hint": "如：私家侦探、教授、古董商等"
+            },
+            {
+                "type": "string",
+                "id": "age",
+                "label": "年龄 (Age)",
+                "hint": "建议 15-90 岁"
+            },
+            {
+                "type": "dropdown",
+                "id": "period",
+                "label": "时代背景",
+                "options": [
+                    "1920s 经典",
+                    "现代 (Modern)",
+                    "煤气灯时代 (Victorian)"
+                ]
+            },
+            {
+                "type": "point_buy",
+                "id": "str",
+                "label": "力量 (STR)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "dex",
+                "label": "敏捷 (DEX)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "con",
+                "label": "体质 (CON)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "app",
+                "label": "外貌 (APP)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "pow",
+                "label": "意志 (POW)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "siz",
+                "label": "体型 (SIZ)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "int",
+                "label": "智力 (INT)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "point_buy",
+                "id": "edu",
+                "label": "教育 (EDU)",
+                "min": 15,
+                "max": 90,
+                "costMultiplier": 1
+            },
+            {
+                "type": "dice_roll",
+                "id": "luck",
+                "label": "初始幸运 (Luck)",
+                "formula": "3d6*5"
+            }
+        ]
+    },
+    "uiBlueprint": {
+        "dicePanelType": "PERCENTILE",
+        "localizationTermMap": {
+            "target_value": "检定目标值",
+            "san": "理智",
+            "hp": "耐久"
+        }
+    },
+    "mechanicsPipeline": {
+        "entryNodeId": "roll_d100",
+        "nodes": {
+            "roll_d100": {
+                "type": "roll",
+                "diceFormula": "1d100",
+                "outputVariable": "result",
+                "nextNodeId": "select_fumble_threshold"
+            },
+            "select_fumble_threshold": {
+                "type": "condition",
+                "leftOperandSource": "intent:target_value",
+                "operator": ">=",
+                "rightOperandSource": "constant:50",
+                "trueNodeId": "check_fumble_at_100",
+                "falseNodeId": "check_fumble_at_96"
+            },
+            "check_fumble_at_100": {
+                "type": "condition",
+                "leftOperandSource": "variable:result",
+                "operator": ">=",
+                "rightOperandSource": "constant:100",
+                "trueNodeId": "set_fumble",
+                "falseNodeId": "check_critical"
+            },
+            "check_fumble_at_96": {
+                "type": "condition",
+                "leftOperandSource": "variable:result",
+                "operator": ">=",
+                "rightOperandSource": "constant:96",
+                "trueNodeId": "set_fumble",
+                "falseNodeId": "check_critical"
+            },
+            "set_fumble": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:CRITICAL_FAILURE",
+                "nextNodeId": null
+            },
+            "check_critical": {
+                "type": "condition",
+                "leftOperandSource": "variable:result",
+                "operator": "<=",
+                "rightOperandSource": "constant:1",
+                "trueNodeId": "set_critical",
+                "falseNodeId": "calc_extreme_target"
+            },
+            "set_critical": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:CRITICAL_SUCCESS",
+                "nextNodeId": null
+            },
+            "calc_extreme_target": {
+                "type": "math",
+                "leftOperandSource": "intent:target_value",
+                "operator": "/",
+                "rightOperandSource": "constant:5",
+                "outputVariable": "extreme_target",
+                "nextNodeId": "check_extreme"
+            },
+            "check_extreme": {
+                "type": "condition",
+                "leftOperandSource": "variable:result",
+                "operator": "<=",
+                "rightOperandSource": "variable:extreme_target",
+                "trueNodeId": "set_extreme_success",
+                "falseNodeId": "calc_hard_target"
+            },
+            "set_extreme_success": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:EXTREME_SUCCESS",
+                "nextNodeId": null
+            },
+            "calc_hard_target": {
+                "type": "math",
+                "leftOperandSource": "intent:target_value",
+                "operator": "/",
+                "rightOperandSource": "constant:2",
+                "outputVariable": "hard_target",
+                "nextNodeId": "check_hard"
+            },
+            "check_hard": {
+                "type": "condition",
+                "leftOperandSource": "variable:result",
+                "operator": "<=",
+                "rightOperandSource": "variable:hard_target",
+                "trueNodeId": "set_hard_success",
+                "falseNodeId": "check_regular"
+            },
+            "set_hard_success": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:HARD_SUCCESS",
+                "nextNodeId": null
+            },
+            "check_regular": {
+                "type": "condition",
+                "leftOperandSource": "variable:result",
+                "operator": "<=",
+                "rightOperandSource": "intent:target_value",
+                "trueNodeId": "set_regular_success",
+                "falseNodeId": "set_failure"
+            },
+            "set_regular_success": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:REGULAR_SUCCESS",
+                "nextNodeId": null
+            },
+            "set_failure": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:FAILURE",
+                "nextNodeId": null
+            }
+        }
+    }
+}

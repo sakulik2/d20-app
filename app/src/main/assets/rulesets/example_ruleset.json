@@ -1,0 +1,96 @@
+{
+    "id": "example_ruleset",
+    "name": "极简示例规则包",
+    "description": "通用轻量模版。提供基础 d20 检定机制。",
+    "version": "1.0",
+    "checkRules": {
+        "targetSource": "EVENT",
+    "modifierSource": "EVENT",
+    "equipmentBonusAppliesTo": "MODIFIER",
+    "equipmentBonusActionIds": ["d20_check"],
+    "defaultActionId": "d20_check",
+        "requiredTargetActionIds": ["d20_check"],
+        "statAliases": {
+            "str": ["力量", "strength"],
+            "dex": ["敏捷", "dexterity"]
+        },
+        "targetLabel": "DC"
+    },
+    "combatRules": {
+        "lifePolicy": "NONE",
+        "defeatAtZeroHp": false
+    },
+    "systemPromptInjection": {
+        "prompt": "你是一个通用跑团主持人（TRPG GM）。需要检定时，在 game_events 中返回统一事件，例如：{\"type\":\"require_roll\",\"action_id\":\"d20_check\",\"expression\":\"1d20\",\"threshold\":12,\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用角色已有属性键。"
+    },
+    "characterTemplate": {
+        "defaultStats": {
+            "hp": "10",
+            "max_hp": "10",
+            "str": "10",
+            "dex": "10"
+        }
+    },
+    "uiBlueprint": {
+        "dicePanelType": "D20_CHECK",
+        "localizationTermMap": {
+            "str": "力量",
+            "dex": "敏捷"
+        }
+    },
+    "creationSchema": {
+        "totalPoints": 27,
+        "fields": [
+            {
+                "type": "string",
+                "id": "name",
+                "label": "角色姓名",
+                "required": true,
+                "hint": "请输入你的英雄名字"
+            },
+            {
+                "type": "point_buy",
+                "id": "str",
+                "label": "力量",
+                "min": 8,
+                "max": 15,
+                "required": true
+            }
+        ]
+    },
+    "mechanicsPipeline": {
+        "entryNodeId": "roll_d20",
+        "nodes": {
+            "roll_d20": {
+                "type": "roll",
+                "diceFormula": "1d20",
+                "outputVariable": "raw_roll",
+                "nextNodeId": "check_dc"
+            },
+            "check_dc": {
+                "type": "condition",
+                "leftOperandSource": "variable:raw_roll",
+                "operator": ">=",
+                "rightOperandSource": "intent:dc",
+                "trueNodeId": "set_success",
+                "falseNodeId": "set_failure"
+            },
+            "set_success": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:SUCCESS",
+                "nextNodeId": null
+            },
+            "set_failure": {
+                "type": "effect",
+                "targetType": "result_state",
+                "targetKey": "state",
+                "operation": "set",
+                "valueSource": "constant:FAILURE",
+                "nextNodeId": null
+            }
+        }
+    }
+}

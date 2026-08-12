@@ -1,0 +1,11 @@
+{
+    "id": "fantasy",
+    "name": "传统奇幻",
+    "author": "System",
+    "version": "1.0",
+    "compatibleRulesets": ["any"],
+    "tags": ["经典", "魔法", "冒险"],
+    "tone": "High Fantasy",
+    "coreSetting": "一个充满魔法、巨龙与古老王国的世界。勇敢的冒险者在酒馆中集结，前往荒野探索未知的遗迹。",
+    "systemPromptPayload": "设定背景为传统 High Fantasy。魔法是世界的一部分，种族多样，正义与邪恶的界限清晰。强调宏大的叙事风格和英雄主义色彩。"
+}

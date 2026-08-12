@@ -1,0 +1,11 @@
+{
+    "id": "eberron",
+    "name": "艾伯伦: 魔法工业",
+    "author": "Keith Baker",
+    "version": "1.0",
+    "compatibleRulesets": ["dnd_5e"],
+    "tags": ["蒸汽朋克", "高魔", "低神"],
+    "tone": "Magicpunk / Noir",
+    "coreSetting": "一个饱受战争蹂躏后的世界，魔法被整合进了工业领域。这里有飞空艇、闪电列车，以及被赋予生命的机关人。",
+    "systemPromptPayload": "你现在处于《艾伯伦》设定。魔法是日常工业的一部分。语气应该是黑色电影式的，充满阴谋、神秘和战后创伤。社会分为不同的龙纹家族。确保机关人、半兽人和龙纹作为核心概念出现。"
+}
