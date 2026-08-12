@@ -1,7 +1,6 @@
 package xyz.sakulik.d20.app.data.repository
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import xyz.sakulik.d20.app.data.local.LoreEntryEntity
 
@@ -21,23 +20,32 @@ class LoreRetrievalPlannerTest {
     }
 
     @Test
-    fun supportsChineseKeywordSeparatorsAndEntryLimit() {
-        val entries = listOf(
-            lore("one", "第一条", "港口，码头"),
-            lore("two", "第二条", "商会；仓库"),
-            lore("three", "第三条", "水手\n船长")
+    fun supportsChineseKeywordSeparators() {
+        val selected = LoreRetrievalPlanner.select(
+            entries = listOf(
+                lore("chinese", "港口档案", "港口，码头；商会\n船长")
+            ),
+            userText = "船长让我们去码头寻找商会",
+            recentMessages = emptyList()
         )
 
+        assertEquals(listOf("chinese"), selected.map(LoreEntryEntity::id))
+    }
+
+    @Test
+    fun respectsEntryLimitAfterRanking() {
         val selected = LoreRetrievalPlanner.select(
-            entries = entries,
-            userText = "船长让我们去码头寻找商会",
+            entries = listOf(
+                lore("high", "灰港", "灰港，码头"),
+                lore("medium", "商会档案", "商会，仓库"),
+                lore("low", "水手档案", "船长")
+            ),
+            userText = "我们抵达灰港码头，寻找商会仓库和船长",
             recentMessages = emptyList(),
             maxEntries = 2
         )
 
-        assertEquals(2, selected.size)
-        assertTrue(selected.any { entry -> entry.id == "one" })
-        assertTrue(selected.any { entry -> entry.id == "two" })
+        assertEquals(listOf("high", "medium"), selected.map(LoreEntryEntity::id))
     }
 
     @Test
