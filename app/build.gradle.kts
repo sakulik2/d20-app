@@ -20,7 +20,7 @@ android {
             useSupportLibrary = true
         }
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "xyz.sakulik.d20.app.testing.D20TestRunner"
 
     }
 
