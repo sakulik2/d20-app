@@ -30,7 +30,7 @@ app/src/androidTest/   Room、Compose 和设备测试
 1. 使用 JDK 17 打开仓库根目录，等待 Gradle Sync 完成。
 2. 选择 `app` 配置及 Android 8.0（API 26）以上设备或模拟器。
 3. 点击 Run 运行应用。
-4. 在测试目录或 Gradle 工具窗口运行 `testDebugUnitTest`；连接设备后运行 `connectedDebugAndroidTest`。
+4. 在测试目录或 Gradle 工具窗口运行 `testDebugUnitTest`；设备测试使用独立的 `testing` 构建类型。在 Android Studio 直接运行 `androidTest`，或连接设备后运行 `connectedTestingAndroidTest`。测试结束时卸载的是 `.testing` 包，不会清除日常 Debug 或 Release 应用的数据。
 
 当前数据库版本为 11。首次编译后请确认 Room 生成 `app/schemas/xyz.sakulik.d20.app.data.local.AppDatabase/11.json`，并将其纳入版本控制。
 

@@ -29,6 +29,12 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
+        create("testing") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testing"
+            versionNameSuffix = "-testing"
+            matchingFallbacks += listOf("debug")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -36,6 +42,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+    testBuildType = "testing"
+    sourceSets {
+        getByName("testing") {
+            java.srcDir("src/debug/java")
+            manifest.srcFile("src/debug/AndroidManifest.xml")
         }
     }
     compileOptions {
@@ -111,4 +124,6 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    add("testingImplementation", "androidx.compose.ui:ui-tooling")
+    add("testingImplementation", "androidx.compose.ui:ui-test-manifest")
 }
