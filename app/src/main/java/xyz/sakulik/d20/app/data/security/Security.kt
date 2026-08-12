@@ -56,7 +56,7 @@ class EncryptedLlmKeyManager(context: Context) : LlmKeyManager {
         private const val KEY_API_PROTOCOL = "api_protocol"
         private const val KEY_MAX_HISTORY_TURNS = "max_history_turns"
         private const val DEFAULT_BASE_URL = "https://api.openai.com"
-        private const val DEFAULT_MODEL = "gpt-3.5-turbo"
+        private const val DEFAULT_MODEL = "gpt-5.5"
         private const val DEFAULT_MAX_HISTORY_TURNS = 8
     }
 

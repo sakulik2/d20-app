@@ -19,7 +19,6 @@ import xyz.sakulik.d20.app.data.security.ApiProtocol
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
 import xyz.sakulik.d20.app.util.Either
 import xyz.sakulik.d20.app.util.LlmJsonBuffer
-import xyz.sakulik.d20.app.util.unescapeJson
 import java.io.IOException
 
 /**
@@ -39,52 +38,6 @@ class LlmRepositoryImpl(
         ignoreUnknownKeys = true
         coerceInputValues = true
         encodeDefaults = false
-    }
-
-    /**
-     * 辅助逻辑：寻找 JSON 字符串的闭合引号，并跳过转义的引号
-     */
-    private fun findJsonStringEnd(text: String): Int {
-        var isEscaped = false
-        for (i in text.indices) {
-            val c = text[i]
-            if (isEscaped) {
-                isEscaped = false
-                continue
-            }
-            if (c == '\\') {
-                isEscaped = true
-            } else if (c == '"') {
-                return i
-            }
-        }
-        return -1
-    }
-
-    /**
-     * 辅助逻辑：处理 JSON 字符串中的转义字符 (\n, \", \\)
-     */
-    private fun unescapeJson(text: String): String {
-        if (!text.contains('\\')) return text
-        val sb = StringBuilder()
-        var i = 0
-        while (i < text.length) {
-            val c = text[i]
-            if (c == '\\' && i + 1 < text.length) {
-                when (text[i + 1]) {
-                    'n' -> sb.append('\n')
-                    't' -> sb.append('\t')
-                    '"' -> sb.append('"')
-                    '\\' -> sb.append('\\')
-                    else -> sb.append(text[i + 1])
-                }
-                i += 2
-            } else {
-                sb.append(c)
-                i++
-            }
-        }
-        return sb.toString()
     }
 
     /**
@@ -154,20 +107,36 @@ class LlmRepositoryImpl(
         model: String,
         messages: List<ChatMessage>,
         protocol: ApiProtocol,
-        stream: Boolean
+        stream: Boolean,
+        structuredOutputMode: StructuredOutputMode = StructuredOutputMode.NONE
     ): Request {
         return when (protocol) {
             ApiProtocol.ANTHROPIC -> buildAnthropicRequest(
                 baseUrl, apiKey, model, messages, stream
             )
             ApiProtocol.RESPONSES -> buildResponsesRequest(
-                baseUrl, apiKey, model, messages, stream
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode
             )
             else -> buildChatCompletionsRequest(
-                baseUrl, apiKey, model, messages, stream
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode
             )
         }
     }
+
+    private fun preferredStructuredOutputMode(
+        baseUrl: String,
+        protocol: ApiProtocol,
+        model: String
+    ): StructuredOutputMode = when {
+        protocol == ApiProtocol.ANTHROPIC -> StructuredOutputMode.NONE
+        protocol == ApiProtocol.CHAT_COMPLETIONS && isDeepSeek(baseUrl, model) ->
+            StructuredOutputMode.JSON_OBJECT
+        else -> StructuredOutputMode.JSON_SCHEMA
+    }
+
+    private fun isDeepSeek(baseUrl: String, model: String): Boolean =
+        baseUrl.contains("deepseek", ignoreCase = true) ||
+            model.startsWith("deepseek", ignoreCase = true)
 
     override fun chatStream(baseUrl: String, messages: List<ChatMessage>): Flow<StreamState> = callbackFlow {
         val apiKey = keyManager.getKey()
@@ -185,9 +154,24 @@ class LlmRepositoryImpl(
         // 构造并发发请求逻辑，优先执行 primaryProtocol，如果遭遇 404/400/405 等错误，降级回退至 CHAT_COMPLETIONS
         var activeCall: Call? = null
 
-        fun executeStream(protocol: ApiProtocol) {
+        fun executeStream(
+            protocol: ApiProtocol,
+            structuredOutputMode: StructuredOutputMode = preferredStructuredOutputMode(
+                baseUrl,
+                protocol,
+                model
+            )
+        ) {
             val request = try {
-                buildProtocolRequest(baseUrl, apiKey, model, messages, protocol, stream = true)
+                buildProtocolRequest(
+                    baseUrl,
+                    apiKey,
+                    model,
+                    messages,
+                    protocol,
+                    stream = true,
+                    structuredOutputMode = structuredOutputMode
+                )
             } catch (exception: Exception) {
                 trySend(StreamState.Error(exception))
                 close()
@@ -195,8 +179,8 @@ class LlmRepositoryImpl(
             }
 
             val fullContentBuffer = StringBuilder()
-            var narrativeFieldFound = false
-            var lastExtractedIndex = 0
+            var streamCompleted = false
+            var streamFailure: String? = null
 
             val call = client.newCall(request)
             activeCall = call
@@ -212,9 +196,24 @@ class LlmRepositoryImpl(
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string() ?: ""
                         Log.w("LlmRepo", "Protocol $protocol returned HTTP ${response.code}: $errorBody")
-                        if (canFallback(protocol, response.code)) {
+                        val fallbackMode = structuredOutputMode.fallbackMode(protocol)
+                        if (fallbackMode != null && response.code in STRUCTURED_OUTPUT_FALLBACK_CODES) {
+                            Log.i(
+                                "LlmRepo",
+                                "Structured output $structuredOutputMode unsupported -> retrying with $fallbackMode"
+                            )
+                            executeStream(protocol, structuredOutputMode = fallbackMode)
+                            return
+                        } else if (canFallback(protocol, response.code)) {
                             Log.i("LlmRepo", "Fallback triggered -> Retrying with /v1/chat/completions")
-                            executeStream(ApiProtocol.CHAT_COMPLETIONS)
+                            executeStream(
+                                ApiProtocol.CHAT_COMPLETIONS,
+                                preferredStructuredOutputMode(
+                                    baseUrl,
+                                    ApiProtocol.CHAT_COMPLETIONS,
+                                    model
+                                )
+                            )
                             return
                         } else {
                             trySend(StreamState.Error(IOException("API Error ${response.code}: $errorBody")))
@@ -226,63 +225,46 @@ class LlmRepositoryImpl(
                     response.body?.source()?.use { source ->
                         while (!source.exhausted()) {
                             val line = source.readUtf8Line() ?: break
-                            val deltaText = parseChunkDelta(protocol, line)
-                            if (deltaText.isNotEmpty()) {
-                                fullContentBuffer.append(deltaText)
-
-                                val currentTotal = fullContentBuffer.toString()
-                                
-                                if (!narrativeFieldFound) {
-                                    val marker = "\"narrative\":"
-                                    val markerIndex = currentTotal.indexOf(marker, lastExtractedIndex)
-                                    if (markerIndex != -1) {
-                                        val firstQuote = currentTotal.indexOf("\"", markerIndex + marker.length)
-                                        if (firstQuote != -1) {
-                                            narrativeFieldFound = true
-                                            lastExtractedIndex = firstQuote + 1
-                                        }
-                                    }
-                                }
-
-                                if (narrativeFieldFound) {
-                                    val potentialNarrative = currentTotal.substring(lastExtractedIndex)
-                                    val endOfField = this@LlmRepositoryImpl.findJsonStringEnd(potentialNarrative)
-                                    if (endOfField != -1) {
-                                        val finalChunk = potentialNarrative.substring(0, endOfField)
-                                        if (finalChunk.isNotEmpty()) {
-                                            trySend(StreamState.TextChunk(unescapeJson(finalChunk)))
-                                        }
-                                        narrativeFieldFound = false 
-                                        lastExtractedIndex = currentTotal.length 
-                                    } else {
-                                        if (potentialNarrative.isNotEmpty()) {
-                                            val toEmit = if (potentialNarrative.endsWith("\\")) {
-                                                potentialNarrative.dropLast(1)
-                                            } else {
-                                                potentialNarrative
-                                            }
-                                            if (toEmit.isNotEmpty()) {
-                                                trySend(StreamState.TextChunk(unescapeJson(toEmit)))
-                                            }
-                                            lastExtractedIndex += toEmit.length
-                                        }
-                                    }
-                                }
+                            val chunk = parseStreamChunk(protocol, line)
+                            if (chunk.delta.isNotEmpty()) {
+                                fullContentBuffer.append(chunk.delta)
+                            }
+                            if (chunk.completed) streamCompleted = true
+                            if (chunk.failure != null) {
+                                streamFailure = chunk.failure
                             }
                         }
                     }
 
+                    if (streamFailure != null) {
+                        trySend(StreamState.Error(IOException(streamFailure)))
+                        close()
+                        return
+                    }
+                    if (!streamCompleted) {
+                        trySend(StreamState.Error(IOException("模型响应流未完整结束，已拒绝执行其中的事件")))
+                        close()
+                        return
+                    }
                     val finalJson = fullContentBuffer.toString()
                     val result = LlmJsonBuffer.parseAndRepair(finalJson)
                     
                     when (result) {
                         is Either.Right -> {
-                            trySend(StreamState.EventTrigger(result.value.gameEvents))
+                            trySend(StreamState.TextChunk(result.value.narrative))
+                            trySend(StreamState.Completed(result.value))
                             close()
                         }
                         is Either.Left -> {
-                            Log.e("LlmRepo", "Final parse failed after repair: $finalJson", result.value)
-                            trySend(StreamState.Error(result.value))
+                            Log.e("LlmRepo", "Final structured response parse failed", result.value)
+                            trySend(
+                                StreamState.Error(
+                                    LlmResponseFormatException(
+                                        result.value.message ?: "模型没有返回有效的 JSON 响应",
+                                        result.value
+                                    )
+                                )
+                            )
                             close()
                         }
                     }
@@ -300,13 +282,42 @@ class LlmRepositoryImpl(
         apiKey: String,
         model: String,
         messages: List<ChatMessage>,
-        stream: Boolean
+        stream: Boolean,
+        structuredOutputMode: StructuredOutputMode
     ): Request {
+        val responseFormat = when (structuredOutputMode) {
+            StructuredOutputMode.JSON_SCHEMA -> ResponseFormat(
+                type = "json_schema",
+                jsonSchema = JsonSchemaFormat(
+                    name = "trpg_turn_response",
+                    strict = true,
+                    schema = AiResponseSchema.value
+                )
+            )
+            StructuredOutputMode.JSON_OBJECT -> ResponseFormat(type = "json_object")
+            StructuredOutputMode.NONE -> null
+        }
         val requestBody = ChatRequest(
             model = model,
             messages = messages,
             stream = stream,
-            responseFormat = null
+            responseFormat = responseFormat,
+            maxTokens = if (
+                structuredOutputMode != StructuredOutputMode.NONE &&
+                !isOpenAiEndpoint(baseUrl)
+            ) {
+                4096
+            } else {
+                null
+            },
+            maxCompletionTokens = if (
+                structuredOutputMode != StructuredOutputMode.NONE &&
+                isOpenAiEndpoint(baseUrl)
+            ) {
+                4096
+            } else {
+                null
+            }
         )
         return Request.Builder()
             .url(buildEndpoint(baseUrl, "v1/chat/completions"))
@@ -315,6 +326,9 @@ class LlmRepositoryImpl(
             .post(json.encodeToString(ChatRequest.serializer(), requestBody).toRequestBody("application/json".toMediaType()))
             .build()
     }
+
+    private fun isOpenAiEndpoint(baseUrl: String): Boolean =
+        baseUrl.contains("openai.com", ignoreCase = true)
 
     private fun buildAnthropicRequest(
         baseUrl: String,
@@ -348,12 +362,26 @@ class LlmRepositoryImpl(
         apiKey: String,
         model: String,
         messages: List<ChatMessage>,
-        stream: Boolean
+        stream: Boolean,
+        structuredOutputMode: StructuredOutputMode
     ): Request {
         val requestBody = ResponsesRequest(
             model = model,
             input = messages,
-            stream = stream
+            stream = stream,
+            text = if (structuredOutputMode == StructuredOutputMode.JSON_SCHEMA) {
+                ResponsesTextConfig(
+                    format = ResponsesTextFormat(
+                        type = "json_schema",
+                        name = "trpg_turn_response",
+                        strict = true,
+                        schema = AiResponseSchema.value
+                    )
+                )
+            } else {
+                null
+            },
+            maxOutputTokens = if (structuredOutputMode == StructuredOutputMode.NONE) null else 4096
         )
         return Request.Builder()
             .url(buildEndpoint(baseUrl, "v1/responses"))
@@ -363,35 +391,56 @@ class LlmRepositoryImpl(
             .build()
     }
 
-    private fun parseChunkDelta(protocol: ApiProtocol, line: String): String {
-        if (!line.startsWith("data:")) return ""
+    private fun parseStreamChunk(protocol: ApiProtocol, line: String): ParsedStreamChunk {
+        if (!line.startsWith("data:")) return ParsedStreamChunk()
         val data = line.removePrefix("data:").trim()
-        if (data == "[DONE]" || data == "[FINISHED]") return ""
+        if (data == "[DONE]" || data == "[FINISHED]") {
+            return ParsedStreamChunk(completed = true)
+        }
 
         return try {
             when (protocol) {
                 ApiProtocol.ANTHROPIC -> {
                     val chunk = json.decodeFromString<AnthropicChunk>(data)
-                    chunk.delta?.text ?: ""
+                    val failure = chunk.delta?.stopReason
+                        ?.takeUnless { it in ANTHROPIC_SUCCESS_STOP_REASONS }
+                        ?.let { "Anthropic 响应未正常结束：$it" }
+                    ParsedStreamChunk(
+                        delta = chunk.delta?.text.orEmpty(),
+                        completed = chunk.type == "message_stop",
+                        failure = failure
+                    )
                 }
                 ApiProtocol.RESPONSES -> {
                     val chunk = json.decodeFromString<ResponsesChunk>(data)
-                    chunk.delta ?: chunk.content ?: chunk.text ?: ""
+                    ParsedStreamChunk(
+                        delta = chunk.delta ?: chunk.content ?: chunk.text.orEmpty(),
+                        completed = chunk.type == "response.completed",
+                        failure = chunk.type
+                            ?.takeIf { it in RESPONSES_FAILURE_EVENTS }
+                            ?.let { "Responses API 响应未正常结束：$it" }
+                    )
                 }
                 else -> {
                     val chunk = json.decodeFromString<ChatChunk>(data)
-                    chunk.choices.firstOrNull()?.delta?.content ?: ""
+                    val choice = chunk.choices.firstOrNull()
+                    val finishReason = choice?.finishReason
+                    ParsedStreamChunk(
+                        delta = choice?.delta?.content.orEmpty(),
+                        completed = finishReason != null,
+                        failure = finishReason
+                            ?.takeUnless { it in CHAT_SUCCESS_FINISH_REASONS }
+                            ?.let { "Chat Completions 响应未正常结束：$it" }
+                    )
                 }
             }
         } catch (e: Exception) {
-            // 兼容性降级尝试
-            try {
-                val chunk = json.decodeFromString<ChatChunk>(data)
-                chunk.choices.firstOrNull()?.delta?.content ?: ""
-            } catch (ex: Exception) {
-                ""
-            }
+            ParsedStreamChunk(failure = "无法解析模型流事件：${e.message ?: "未知格式"}")
         }
+    }
+
+    private fun parseChunkDelta(protocol: ApiProtocol, line: String): String {
+        return parseStreamChunk(protocol, line).delta
     }
 
     private fun extractResponseText(protocol: ApiProtocol, body: String): String {
@@ -447,12 +496,8 @@ class LlmRepositoryImpl(
     }
 
     private fun extractJsonObject(text: String): String {
-        val firstBrace = text.indexOf('{')
-        val lastBrace = text.lastIndexOf('}')
-        require(firstBrace >= 0 && lastBrace > firstBrace) {
-            "模型响应中没有找到有效的 JSON 对象"
-        }
-        return text.substring(firstBrace, lastBrace + 1)
+        return LlmJsonBuffer.extractJson(text)
+            ?: throw LlmResponseFormatException("模型必须只返回一个完整 JSON 对象")
     }
 
     override fun chatRaw(baseUrl: String, messages: List<ChatMessage>): Flow<String> = callbackFlow {
@@ -533,7 +578,7 @@ class LlmRepositoryImpl(
             
             规则特定指导：${basePromptInjection}
             
-            要求返回 JSON 格式，包含以下字段：
+            要求返回 JSON（json）格式，包含以下字段：
             - name: 角色姓名
             - stats: 叙事属性 Map (包含 race, subrace, class, subclass, background, occupation 等文字描述字段。请勿包含力量、敏捷、HP 等任何数值属性，这些将由本地规则引擎生成)
             - bio: 一段简短的角色背景描述 (Markdown 格式)
@@ -541,6 +586,8 @@ class LlmRepositoryImpl(
               D&D 武器 modifiers 必须使用字符串值：attack_ability(STR/DEX/FINESSE)、proficient、attack_bonus、damage_formula、damage_ability、damage_bonus、damage_type；可选 targeting(SINGLE/MULTIPLE/ALL_ENEMIES) 与 max_targets。
               D&D 法术 category 使用“法术”，modifiers 必须包含 resolution_type(ATTACK/SAVING_THROW/AUTOMATIC/HEALING)、slot_level(戏法为0)，仪式法术另设 ritual=true；并按类型提供 ability、attack_bonus、save_ability、save_dc、damage_formula、damage_type、half_on_save 或 healing_formula；多目标法术使用 targeting=MULTIPLE/ALL_ENEMIES，可用 max_targets 限制数量。
               不要只把伤害骰写进 description；规则字段缺失的武器和法术无法由本地裁决器使用。
+
+            JSON 示例：{"name":"示例角色","stats":{"race":"人类","class":"调查员"},"bio":"一段简短背景。","items":[]}
             
             请直接返回 JSON 对象，不要包含多余的文字说明。"""
         val model = keyManager.getModel()
@@ -548,9 +595,35 @@ class LlmRepositoryImpl(
         val primaryProtocol = determineProtocol(baseUrl)
         var activeCall: Call? = null
 
-        fun execute(protocol: ApiProtocol) {
+        fun execute(
+            protocol: ApiProtocol,
+            structuredOutputMode: StructuredOutputMode = if (
+                protocol == ApiProtocol.CHAT_COMPLETIONS
+            ) {
+                StructuredOutputMode.JSON_OBJECT
+            } else {
+                StructuredOutputMode.NONE
+            },
+            formatRetryCount: Int = 0
+        ) {
+            val requestMessages = if (formatRetryCount == 0) {
+                messages
+            } else {
+                messages + ChatMessage(
+                    role = "user",
+                    content = "上一条响应为空或不是合法 json。请只重新返回一个完整 JSON 对象，不要解释。"
+                )
+            }
             val request = try {
-                buildProtocolRequest(baseUrl, apiKey, model, messages, protocol, stream = false)
+                buildProtocolRequest(
+                    baseUrl,
+                    apiKey,
+                    model,
+                    requestMessages,
+                    protocol,
+                    stream = false,
+                    structuredOutputMode = structuredOutputMode
+                )
             } catch (exception: Exception) {
                 trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(exception))
                 close()
@@ -574,6 +647,11 @@ class LlmRepositoryImpl(
                         val body = response.body?.string() ?: ""
 
                         if (!response.isSuccessful) {
+                            val fallbackMode = structuredOutputMode.fallbackMode(protocol)
+                            if (fallbackMode != null && response.code in STRUCTURED_OUTPUT_FALLBACK_CODES) {
+                                execute(protocol, fallbackMode, formatRetryCount)
+                                return
+                            }
                             if (canFallback(protocol, response.code)) {
                                 execute(ApiProtocol.CHAT_COMPLETIONS)
                                 return
@@ -590,6 +668,14 @@ class LlmRepositoryImpl(
                         trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Success(character))
                         close()
                     } catch (e: Exception) {
+                        if (
+                            formatRetryCount < 1 &&
+                            (e is LlmResponseFormatException ||
+                                e is kotlinx.serialization.SerializationException)
+                        ) {
+                            execute(protocol, structuredOutputMode, formatRetryCount + 1)
+                            return
+                        }
                         Log.e("LlmRepo", "genChar Parse Error", e)
                         trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(e))
                         close()
@@ -602,4 +688,29 @@ class LlmRepositoryImpl(
 
         awaitClose { activeCall?.cancel() }
     }.flowOn(Dispatchers.IO)
+
+    private data class ParsedStreamChunk(
+        val delta: String = "",
+        val completed: Boolean = false,
+        val failure: String? = null
+    )
+
+    private enum class StructuredOutputMode {
+        JSON_SCHEMA,
+        JSON_OBJECT,
+        NONE;
+
+        fun fallbackMode(protocol: ApiProtocol): StructuredOutputMode? = when (this) {
+            JSON_SCHEMA -> if (protocol == ApiProtocol.CHAT_COMPLETIONS) JSON_OBJECT else NONE
+            JSON_OBJECT -> NONE
+            NONE -> null
+        }
+    }
+
+    private companion object {
+        val STRUCTURED_OUTPUT_FALLBACK_CODES = setOf(400, 404, 405, 415, 422)
+        val CHAT_SUCCESS_FINISH_REASONS = setOf("stop")
+        val ANTHROPIC_SUCCESS_STOP_REASONS = setOf("end_turn", "stop_sequence", "tool_use")
+        val RESPONSES_FAILURE_EVENTS = setOf("response.incomplete", "response.failed", "error")
+    }
 }

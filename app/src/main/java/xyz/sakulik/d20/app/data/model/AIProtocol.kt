@@ -14,7 +14,7 @@ data class AIResponse(
     @SerialName("narrative")
     val narrative: String, // UI 打字机呈现的故事文本
     @SerialName("game_events")
-    val gameEvents: List<GameEvent> = emptyList()
+    val gameEvents: List<GameEvent>
 )
 
 /**
@@ -54,21 +54,6 @@ sealed class GameEvent {
     ) : GameEvent()
 
     /**
-     * 属性修改事件 (泛型化设计)
-     * @param statId 要修改的属性标识，如 "hp", "san", "str", "luck"
-     * @param delta 变化数值，正数为加，负数为减
-     * @param reason 修改原因描述，可选
-     */
-    @Serializable
-    @SerialName("update_stat")
-    data class UpdateStat(
-        @SerialName("stat_id")
-        val statId: String,
-        val delta: Int,
-        val reason: String? = null
-    ) : GameEvent()
-
-    /**
      * 获得物品事件
      * @param name 物品名称
      * @param description 描述
@@ -94,33 +79,6 @@ sealed class GameEvent {
         val combatants: List<CombatantDefinition>
     ) : GameEvent()
 
-    /**
-     * 结束战斗事件
-     */
-    @Serializable
-    @SerialName("end_combat")
-    data object EndCombat : GameEvent()
-
-    /**
-     * 自动写入/更新世界书设定 (Piggyback Event)
-     */
-    @Serializable
-    @SerialName("update_lore")
-    data class UpdateLore(
-        val title: String,
-        val category: String = "LORE",
-        val keywords: List<String> = emptyList(),
-        val content: String
-    ) : GameEvent()
-
-    /**
-     * 移除世界书设定
-     */
-    @Serializable
-    @SerialName("remove_lore")
-    data class RemoveLore(
-        val title: String
-    ) : GameEvent()
 }
 
 /**

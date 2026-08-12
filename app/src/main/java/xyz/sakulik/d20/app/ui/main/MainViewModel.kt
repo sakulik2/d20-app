@@ -18,6 +18,8 @@ import xyz.sakulik.d20.app.data.local.GameStateDao
 import xyz.sakulik.d20.app.data.local.MessageDao
 import xyz.sakulik.d20.app.data.local.MessageEntity
 import xyz.sakulik.d20.app.data.model.GameEvent
+import xyz.sakulik.d20.app.data.model.GameEventBatchValidator
+import xyz.sakulik.d20.app.data.model.LlmResponseFormatException
 import xyz.sakulik.d20.app.data.model.StreamState
 import xyz.sakulik.d20.app.data.repository.ContextAssembler
 import xyz.sakulik.d20.app.data.repository.InventoryRepository
@@ -221,9 +223,21 @@ class MainViewModel(
         }
     }
 
-    private suspend fun sendActionInternal(text: String, retryCount: Int = 0) {
+    private suspend fun sendActionInternal(
+        text: String,
+        retryCount: Int = 0,
+        protocolCorrection: String? = null
+    ) {
         val cid = campaignId
-        val conversation = contextAssembler.buildConversation(text, cid)
+        val baseConversation = contextAssembler.buildConversation(text, cid)
+        val conversation = if (protocolCorrection == null) {
+            baseConversation
+        } else {
+            baseConversation.dropLast(1) + xyz.sakulik.d20.app.data.model.ChatMessage(
+                role = "user",
+                content = "上一条响应未通过客户端协议验证：$protocolCorrection。请重新返回完整 JSON；不要解释，不要复用无效事件。"
+            )
+        }
 
         if (text.isNotEmpty()) {
             val isHidden = text.startsWith("[检定结果]")
@@ -239,20 +253,39 @@ class MainViewModel(
                 is StreamState.TextChunk -> {
                     updateState { it.copy(streamingNarrative = it.streamingNarrative + state.delta) }
                 }
-                is StreamState.EventTrigger -> {
-                    val finalNarrative = uiState.value.streamingNarrative
-                    messageDao.insertMessage(MessageEntity(campaignId = cid, role = "assistant", content = finalNarrative))
+                is StreamState.Completed -> {
+                    val validationError = GameEventBatchValidator.validate(state.response.gameEvents)
+                    if (validationError != null) {
+                        updateState { it.copy(streamingNarrative = "", isLoading = false) }
+                        if (retryCount < 1) {
+                            sendActionInternal(
+                                text = "",
+                                retryCount = retryCount + 1,
+                                protocolCorrection = validationError.message
+                            )
+                        } else {
+                            sendEvent(MainUiEvent.Error("模型事件协议无效：${validationError.message}"))
+                        }
+                        return@collect
+                    }
+                    messageDao.insertMessage(
+                        MessageEntity(
+                            campaignId = cid,
+                            role = "assistant",
+                            content = state.response.narrative
+                        )
+                    )
                     updateState { it.copy(streamingNarrative = "", isLoading = false) }
-                    handleGameEvents(state.events)
+                    handleGameEvents(state.response.gameEvents)
                 }
                 is StreamState.Error -> {
                     updateState { it.copy(isLoading = false, streamingNarrative = "") }
-                    if (state.throwable is kotlinx.serialization.SerializationException && retryCount < 1) {
-                        messageDao.insertMessage(MessageEntity(
-                            campaignId = cid, role = "assistant", isHidden = true,
-                            content = "[系统：解析失败，请按 JSON 格式重发]"
-                        ))
-                        sendActionInternal("", retryCount + 1) 
+                    if (state.throwable is LlmResponseFormatException && retryCount < 1) {
+                        sendActionInternal(
+                            text = "",
+                            retryCount = retryCount + 1,
+                            protocolCorrection = state.throwable.message ?: "JSON 结构无效"
+                        )
                     } else {
                         val errMsg = state.throwable.message ?: "Network Error"
                         sendEvent(MainUiEvent.Error(errMsg))
@@ -263,6 +296,10 @@ class MainViewModel(
     }
 
     internal suspend fun handleGameEvents(events: List<GameEvent>) {
+        GameEventBatchValidator.validate(events)?.let { error ->
+            sendEvent(MainUiEvent.Error("模型事件协议无效：${error.message}"))
+            return
+        }
         events.forEach { event ->
             when (event) {
                 is GameEvent.RequireRoll -> {
@@ -378,9 +415,6 @@ class MainViewModel(
                     updateState { it.copy(isDicePanelVisible = true, currentDiceIntent = intent) }
                     sendEvent(MainUiEvent.ShowDicePanel(intent))
                 }
-                is GameEvent.UpdateStat -> {
-                    updateCharacterStat(event.statId, event.delta)
-                }
                 is GameEvent.AddItem -> {
                     val cid = campaignId
                     inventoryRepository.addItem(xyz.sakulik.d20.app.data.local.ItemEntity(
@@ -392,7 +426,7 @@ class MainViewModel(
                         modifiers = event.modifiers.mapValues { (_, v) ->
                             if (v is JsonPrimitive) v.content else v.toString().removeSurrounding("\"")
                         },
-                        isEquipped = true
+                        isEquipped = false
                     ))
                     sensoryController?.hapticItemGain()
                 }
@@ -438,27 +472,6 @@ class MainViewModel(
                         )
                     )
                     sendEvent(MainUiEvent.ShowDicePanel(intent))
-                }
-                is GameEvent.EndCombat -> {
-                    gameStateDao.endCombat(campaignId)
-                    combatStateManager.endCombat()
-                    pendingCombatants = null
-                    updateState { it.copy(combatState = null, turnResourceLabels = emptyMap()) }
-                }
-                is GameEvent.UpdateLore -> {
-                    val cid = campaignId
-                    val keywordsStr = if (event.keywords.isNotEmpty()) event.keywords.joinToString(",") else event.title
-                    loreEntryDao?.insertOrUpdateLore(xyz.sakulik.d20.app.data.local.LoreEntryEntity(
-                        campaignId = cid,
-                        title = event.title,
-                        category = event.category,
-                        keywords = keywordsStr,
-                        content = event.content
-                    ))
-                    Log.d("Lorebook", "Piggyback Lore saved: [${event.title}] (${event.category})")
-                }
-                is GameEvent.RemoveLore -> {
-                    loreEntryDao?.deleteByTitle(campaignId, event.title)
                 }
             }
         }
@@ -693,32 +706,6 @@ class MainViewModel(
             val current = value.jsonObject["current"]?.jsonPrimitive?.intOrNull ?: 0
             level.takeIf { current > 0 }
         }.sorted()
-    }
-
-    private suspend fun updateCharacterStat(statId: String, delta: Int) {
-        val char = uiState.value.character ?: return
-        val currentVal = char.stats[statId]?.toIntOrNull() ?: 0
-        val policy = combatPolicy(char.activeSystem)
-        val isDndHp = statId.equals("hp", ignoreCase = true) &&
-            policy.lifePolicyId == RulesetCombatPolicy.LIFE_POLICY_DND_5E
-        val newStats = if (isDndHp) {
-            DndLifeStateRules.applyHpDelta(char.stats, delta)
-        } else {
-            char.stats + (statId to (currentVal + delta).toString())
-        }
-        val newVal = newStats[statId]?.toIntOrNull() ?: currentVal
-        val updatedCharacter = char.copy(stats = newStats)
-        characterDao.updateCharacter(updatedCharacter)
-        syncCharacterState(updatedCharacter)
-
-        if (
-            statId.equals("hp", ignoreCase = true) &&
-            currentVal > 0 &&
-            newVal <= 0 &&
-            policy.lifePolicyId == RulesetCombatPolicy.LIFE_POLICY_DND_5E
-        ) {
-            sensoryController?.hapticHeavyDamage()
-        }
     }
 
     fun requestDeathSaveRoll() {

@@ -43,9 +43,9 @@ class ChatViewModel(
                         // 收到文本碎片，立即追加到 UI 状态中 (实现打字机效果)
                         updateState { it.copy(narrative = it.narrative + state.delta) }
                     }
-                    is StreamState.EventTrigger -> {
+                    is StreamState.Completed -> {
                         // 流结束，收到最终的游戏指令
-                        sendEvent(ChatUiEvent.ExecuteGameEvents(state.events))
+                        sendEvent(ChatUiEvent.ExecuteGameEvents(state.response.gameEvents))
                     }
                     is StreamState.Error -> {
                         updateState { it.copy(error = state.throwable.message) }

@@ -2,118 +2,54 @@ package xyz.sakulik.d20.app.util
 
 import xyz.sakulik.d20.app.data.model.AIResponse
 import kotlinx.serialization.json.Json
-import java.util.Stack
 
 /**
- * 核心任务：实现健壮的大模型 JSON 提取与修复逻辑
+ * 严格解析模型返回的完整 JSON。这里不得修补截断内容或把普通文本视为成功，
+ * 因为解析结果会驱动本地游戏状态。
  */
 object LlmJsonBuffer {
 
     private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        coerceInputValues = true
+        ignoreUnknownKeys = false
+        isLenient = false
+        coerceInputValues = false
+        explicitNulls = true
     }
 
     /**
-     * 解析并修复 LLM 返回的 JSON 文本
+     * 解析 LLM 返回的完整 JSON 文本。
      * @param rawText 原始流文本
      */
     fun parseAndRepair(rawText: String): Either<Throwable, AIResponse> {
-        val trimmed = rawText.trim()
-        if (trimmed.isBlank()) {
+        val normalized = stripSingleCodeFence(rawText)
+        if (normalized.isBlank()) {
             return Either.Left(IllegalArgumentException("LLM 输出为空"))
         }
-
-        // 1. 尝试 JSON 提取与括号栈修复
-        val extracted = extractJson(trimmed)
-        if (extracted != null) {
-            try {
-                val sanitized = sanitize(extracted)
-                val fixed = repairJson(sanitized)
-                val result = json.decodeFromString<AIResponse>(fixed)
-                return Either.Right(result)
-            } catch (e: Exception) {
-                return Either.Left(e)
-            }
+        if (!normalized.startsWith('{') || !normalized.endsWith('}')) {
+            return Either.Left(IllegalArgumentException("模型必须只返回一个完整 JSON 对象"))
         }
-
-        // 2. 兜底容错：当 LLM 未输出 JSON 格式而直接输出自然语言剧情旁白时，自动无感包裹为 AIResponse
-        val cleanProse = sanitize(trimmed)
-        if (cleanProse.isNotBlank()) {
-            return Either.Right(
-                AIResponse(
-                    narrative = cleanProse,
-                    gameEvents = emptyList()
-                )
-            )
+        return try {
+            Either.Right(json.decodeFromString<AIResponse>(normalized))
+        } catch (error: Exception) {
+            Either.Left(error)
         }
-
-        return Either.Left(IllegalArgumentException("未能识别到有效内容"))
     }
 
     /**
-     * 1. 边界提取：找到第一对匹配或最外层的 {..}
+     * 仅供诊断使用：只有整个文本本身是一个对象时才返回。
      */
     fun extractJson(text: String): String? {
-        val startIndex = text.indexOf('{')
-        val endIndex = text.lastIndexOf('}')
-        if (startIndex == -1) return null
-        
-        return if (endIndex > startIndex) {
-            text.substring(startIndex, endIndex + 1)
-        } else {
-            // 如果没有结束括号，提取从 { 开始到结尾的所有内容，交给 repair 处理
-            text.substring(startIndex)
-        }
+        val normalized = stripSingleCodeFence(text)
+        return normalized.takeIf { it.startsWith('{') && it.endsWith('}') }
     }
 
-    /**
-     * 2. 转义字符清理：清洗 AI 可能错误的二次转义
-     */
-    fun sanitize(text: String): String {
-        return text
-            .replace("```json", "")
-            .replace("```", "")
-            .replace("\\'", "'")
-            .trim()
-    }
-
-    /**
-     * 3. 括号补全 (Stack-based Fixing)
-     * 核心逻辑：遍历字符串，记录未闭合的引号、大括号、中括号，并在结尾补齐
-     */
-    fun repairJson(text: String): String {
-        val stack = Stack<Char>()
-        var inQuote = false
-        var isEscaped = false
-
-        for (char in text) {
-            if (isEscaped) {
-                isEscaped = false
-                continue
-            }
-            when (char) {
-                '\\' -> isEscaped = true
-                '"' -> inQuote = !inQuote
-                '{', '[' -> if (!inQuote) stack.push(char)
-                '}' -> if (!inQuote && stack.isNotEmpty() && stack.peek() == '{') stack.pop()
-                ']' -> if (!inQuote && stack.isNotEmpty() && stack.peek() == '[') stack.pop()
-            }
-        }
-
-        val repaired = StringBuilder(text)
-        
-        // 闭合引号
-        if (inQuote) repaired.append('"')
-
-        // 逆向闭合括号
-        while (stack.isNotEmpty()) {
-            val open = stack.pop()
-            if (open == '{') repaired.append('}')
-            if (open == '[') repaired.append(']')
-        }
-
-        return repaired.toString()
+    private fun stripSingleCodeFence(text: String): String {
+        val trimmed = text.trim()
+        if (!trimmed.startsWith("```") || !trimmed.endsWith("```")) return trimmed
+        val firstLineEnd = trimmed.indexOf('\n')
+        if (firstLineEnd < 0) return trimmed
+        val language = trimmed.substring(3, firstLineEnd).trim()
+        if (language.isNotEmpty() && !language.equals("json", ignoreCase = true)) return trimmed
+        return trimmed.substring(firstLineEnd + 1, trimmed.length - 3).trim()
     }
 }

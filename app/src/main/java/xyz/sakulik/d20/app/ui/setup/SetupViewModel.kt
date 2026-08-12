@@ -18,7 +18,7 @@ import java.util.UUID
 data class SetupUiState(
     val apiKey: String = "",
     val baseUrl: String = "",
-    val model: String = "gpt-3.5-turbo",
+    val model: String = "gpt-5.5",
     val selectedRulesetId: String = "coc_7e",
     val isPasswordVisible: Boolean = false,
     val showApiConfig: Boolean = true,

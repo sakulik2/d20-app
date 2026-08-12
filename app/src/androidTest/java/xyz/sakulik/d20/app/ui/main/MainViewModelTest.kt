@@ -31,7 +31,6 @@ import xyz.sakulik.d20.app.data.repository.InventoryRepository
 import xyz.sakulik.d20.app.data.repository.LlmRepository
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
 import xyz.sakulik.d20.app.domain.combat.CombatantDefinition
-import xyz.sakulik.d20.app.domain.rules.action.DndLifeStateRules
 import xyz.sakulik.d20.app.domain.rules.dynamic.CheckIntent
 import xyz.sakulik.d20.app.domain.rules.dynamic.DiceSubmission
 
@@ -73,49 +72,6 @@ class MainViewModelTest {
     @After
     fun tearDown() {
         database.close()
-    }
-
-    @Test
-    fun consecutiveUpdateStatEventsAccumulateInRoom() = runBlocking {
-        val viewModel = createViewModel()
-        withTimeout(2_000) {
-            viewModel.uiState.first { it.character != null }
-        }
-
-        viewModel.handleGameEvents(
-            listOf(
-                GameEvent.UpdateStat("hp", -3),
-                GameEvent.UpdateStat("hp", -4)
-            )
-        )
-
-        val saved = database.characterDao().getCharacterByCampaign(CAMPAIGN_ID)
-        assertEquals("3", saved?.stats?.get("hp"))
-        assertEquals("3", viewModel.uiState.value.character?.stats?.get("hp"))
-    }
-
-    @Test
-    fun damageAtZeroAddsDeathSaveFailure() = runBlocking {
-        val character = database.characterDao().getCharacterByCampaign(CAMPAIGN_ID)!!
-        database.characterDao().updateCharacter(
-            character.copy(
-                stats = character.stats + mapOf(
-                    "hp" to "0",
-                    "deathSaves" to """{"successes":3,"failures":1,"isStable":true}"""
-                )
-            )
-        )
-        val viewModel = createViewModel()
-        withTimeout(2_000) {
-            viewModel.uiState.first { it.isStable }
-        }
-
-        viewModel.handleGameEvents(listOf(GameEvent.UpdateStat("hp", -4)))
-
-        val saved = database.characterDao().getCharacterByCampaign(CAMPAIGN_ID)!!
-        assertEquals("0", saved.stats["hp"])
-        assertEquals(2, DndLifeStateRules.snapshot(saved.stats).failures)
-        assertEquals(true, viewModel.uiState.value.isDying)
     }
 
     @Test

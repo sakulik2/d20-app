@@ -97,7 +97,7 @@ fun SetupScreen(
                 onValueChange = { viewModel.onModelChange(it) },
                 label = { Text("模型名称") },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("gpt-3.5-turbo") },
+                placeholder = { Text("gpt-5.5") },
                 singleLine = true
             )
 

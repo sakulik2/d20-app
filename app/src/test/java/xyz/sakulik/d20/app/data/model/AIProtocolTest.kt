@@ -52,6 +52,37 @@ class AIProtocolTest {
     }
 
     @Test
+    fun rejectLegacyUpdateStatEvent() {
+        val raw = """
+            {
+              "narrative": "你受到了伤害。",
+              "game_events": [
+                {"type":"update_stat","stat_id":"hp","delta":-4,"reason":"伤害"}
+              ]
+            }
+        """.trimIndent()
+
+        assertTrue(LlmJsonBuffer.parseAndRepair(raw).isLeft())
+    }
+
+    @Test
+    fun rejectUnknownEventField() {
+        val raw = """
+            {
+              "narrative": "需要检定。",
+              "game_events": [{
+                "type":"require_roll",
+                "expression":"1d20",
+                "reason":"调查",
+                "invented_field":true
+              }]
+            }
+        """.trimIndent()
+
+        assertTrue(LlmJsonBuffer.parseAndRepair(raw).isLeft())
+    }
+
+    @Test
     fun parseAttackTargetAndSpellSlotFields() {
         val raw = """
             {

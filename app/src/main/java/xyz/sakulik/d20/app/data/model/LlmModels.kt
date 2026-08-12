@@ -2,6 +2,7 @@ package xyz.sakulik.d20.app.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * OpenAI Chat Completion 请求体
@@ -17,7 +18,11 @@ data class ChatRequest(
     @SerialName("top_p")
     val topP: Double? = null,
     @SerialName("frequency_penalty")
-    val frequencyPenalty: Double? = null
+    val frequencyPenalty: Double? = null,
+    @SerialName("max_tokens")
+    val maxTokens: Int? = null,
+    @SerialName("max_completion_tokens")
+    val maxCompletionTokens: Int? = null
 )
 
 @Serializable
@@ -28,7 +33,16 @@ data class ChatMessage(
 
 @Serializable
 data class ResponseFormat(
-    val type: String
+    val type: String,
+    @SerialName("json_schema")
+    val jsonSchema: JsonSchemaFormat? = null
+)
+
+@Serializable
+data class JsonSchemaFormat(
+    val name: String,
+    val strict: Boolean,
+    val schema: JsonObject
 )
 
 /**
@@ -74,7 +88,9 @@ data class AnthropicChunk(
 @Serializable
 data class AnthropicDelta(
     val type: String? = null,
-    val text: String? = null
+    val text: String? = null,
+    @SerialName("stop_reason")
+    val stopReason: String? = null
 )
 
 /**
@@ -85,7 +101,23 @@ data class ResponsesRequest(
     val model: String,
     val input: List<ChatMessage>,
     val stream: Boolean = true,
-    val temperature: Double? = null
+    val temperature: Double? = null,
+    val text: ResponsesTextConfig? = null,
+    @SerialName("max_output_tokens")
+    val maxOutputTokens: Int? = null
+)
+
+@Serializable
+data class ResponsesTextConfig(
+    val format: ResponsesTextFormat
+)
+
+@Serializable
+data class ResponsesTextFormat(
+    val type: String,
+    val name: String,
+    val strict: Boolean,
+    val schema: JsonObject
 )
 
 @Serializable
@@ -102,8 +134,13 @@ data class ResponsesChunk(
 sealed class StreamState {
     /** 叙事文本片段 */
     data class TextChunk(val delta: String) : StreamState()
-    /** 最终解析出的游戏指令事件 */
-    data class EventTrigger(val events: List<GameEvent>) : StreamState()
+    /** 完整解析并通过结构校验的模型回合 */
+    data class Completed(val response: AIResponse) : StreamState()
     /** 错误状态 */
     data class Error(val throwable: Throwable) : StreamState()
 }
+
+class LlmResponseFormatException(
+    message: String,
+    cause: Throwable? = null
+) : IllegalArgumentException(message, cause)
