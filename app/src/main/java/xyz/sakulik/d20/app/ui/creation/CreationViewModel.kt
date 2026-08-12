@@ -1,6 +1,8 @@
 package xyz.sakulik.d20.app.ui.creation
 
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import xyz.sakulik.d20.app.data.local.CharacterDao
 import xyz.sakulik.d20.app.data.local.CharacterEntity
@@ -51,6 +53,9 @@ class CreationViewModel(
     private val inventoryRepository: xyz.sakulik.d20.app.data.repository.InventoryRepository,
     private val keyManager: xyz.sakulik.d20.app.data.security.LlmKeyManager
 ) : BaseViewModel<CreationUiState, CreationUiEvent>(CreationUiState()) {
+
+    private var aiGenerationJob: Job? = null
+    private var aiGenerationRequestId: Long = 0
 
     /**
      * 初始化创卡界面
@@ -332,6 +337,7 @@ class CreationViewModel(
      * AI 辅助生成
      */
     fun generateWithAi(description: String) {
+        if (uiState.value.isAiGenerating) return
         val baseUrl = keyManager.getBaseUrl()
         val currentState = uiState.value
         val rid = currentState.rulesetId
@@ -339,50 +345,63 @@ class CreationViewModel(
         val ruleset = xyz.sakulik.d20.app.domain.rules.RulesetRegistry.getRuleset(context, rid)
         val promptInjection = (ruleset?.getLlmContext() ?: "") + 
                              "\n请务必包含以下核心属性：$schemaPrompt"
-        
-        viewModelScope.launch {
-            repository.generateCharacter(baseUrl, description, rid, promptInjection).collect { state ->
-                when (state) {
-                    is xyz.sakulik.d20.app.data.model.CharacterGenState.Loading -> {
-                        updateState { it.copy(isAiGenerating = true, error = null) }
-                    }
-                    is xyz.sakulik.d20.app.data.model.CharacterGenState.Success -> {
-                        val narrativeStats = state.data.stats.filterKeys { 
-                            it in listOf("race", "subrace", "class", "subclass", "background", "occupation")
-                        }.mapValues { (_, value) ->
-                            if (value is JsonPrimitive) value.content else value.toString().removeSurrounding("\"")
-                        }.toMutableMap()
+        val requestId = ++aiGenerationRequestId
+        updateState { it.copy(isAiGenerating = true, error = null) }
+        aiGenerationJob = viewModelScope.launch {
+            try {
+                repository.generateCharacter(baseUrl, description, rid, promptInjection).collect { state ->
+                    when (state) {
+                        is xyz.sakulik.d20.app.data.model.CharacterGenState.Loading -> Unit
+                        is xyz.sakulik.d20.app.data.model.CharacterGenState.Success -> {
+                            val narrativeStats = state.data.stats.filterKeys {
+                                it in listOf("race", "subrace", "class", "subclass", "background", "occupation")
+                            }.mapValues { (_, value) ->
+                                if (value is JsonPrimitive) value.content else value.toString().removeSurrounding("\"")
+                            }.toMutableMap()
 
-                        if (!narrativeStats.containsKey("name")) {
-                            narrativeStats["name"] = state.data.name
-                        }
+                            if (!narrativeStats.containsKey("name")) {
+                                narrativeStats["name"] = state.data.name
+                            }
 
-                        updateState { prev ->
-                             val baseStats = prev.stats.toMutableMap()
-                             baseStats.putAll(narrativeStats)
-                             
-                             prev.copy(
-                                isAiGenerating = false,
-                                allocationMode = AllocationMode.AI_GEN,
-                                characterName = state.data.name,
-                                stats = baseStats,
-                                bio = state.data.bio,
-                                generatedItems = state.data.items,
-                                remainingPoints = 0
-                            ) 
+                            updateState { prev ->
+                                val baseStats = prev.stats.toMutableMap()
+                                baseStats.putAll(narrativeStats)
+
+                                prev.copy(
+                                    allocationMode = AllocationMode.AI_GEN,
+                                    characterName = state.data.name,
+                                    stats = baseStats,
+                                    bio = state.data.bio,
+                                    generatedItems = state.data.items,
+                                    remainingPoints = 0
+                                )
+                            }
+
+                            rollStats()
+                            updateState { it.copy(allocationMode = AllocationMode.ROLLING) }
                         }
-                        
-                        rollStats()
-                        
-                        updateState { it.copy(allocationMode = AllocationMode.ROLLING) }
+                        is xyz.sakulik.d20.app.data.model.CharacterGenState.Error -> {
+                            updateState { it.copy(error = state.throwable.message) }
+                            sendEvent(CreationUiEvent.Error("AI 生成失败: ${state.throwable.message}"))
+                        }
                     }
-                    is xyz.sakulik.d20.app.data.model.CharacterGenState.Error -> {
-                        updateState { it.copy(isAiGenerating = false, error = state.throwable.message) }
-                        sendEvent(CreationUiEvent.Error("AI 生成失败: ${state.throwable.message}"))
-                    }
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } finally {
+                if (aiGenerationRequestId == requestId) {
+                    updateState { it.copy(isAiGenerating = false) }
+                    aiGenerationJob = null
                 }
             }
         }
+    }
+
+    fun cancelAiGeneration() {
+        aiGenerationRequestId += 1
+        aiGenerationJob?.cancel()
+        aiGenerationJob = null
+        updateState { it.copy(isAiGenerating = false, error = null) }
     }
 
     /**

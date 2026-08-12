@@ -38,6 +38,10 @@ fun CreationScreen(
     var showAddItemDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.cancelAiGeneration() }
+    }
     
     // 同步 AI 生成的姓名到动态字段
     LaunchedEffect(uiState.characterName) {
@@ -135,13 +139,24 @@ fun CreationScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                    onClick = { viewModel.generateWithAi(aiDescription) },
+                    onClick = {
+                        if (uiState.isAiGenerating) {
+                            viewModel.cancelAiGeneration()
+                        } else {
+                            viewModel.generateWithAi(aiDescription)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isAiGenerating && aiDescription.isNotBlank(),
+                    enabled = uiState.isAiGenerating || aiDescription.isNotBlank(),
                     shape = MaterialTheme.shapes.small
                 ) {
                     if (uiState.isAiGenerating) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("取消生成")
                     } else {
                         Text("AI 自动生成全部信息")
                     }

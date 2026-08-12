@@ -3,6 +3,7 @@ package xyz.sakulik.d20.app.data.repository
 import android.util.Log
 import xyz.sakulik.d20.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -15,6 +16,7 @@ import kotlinx.serialization.encodeToString
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.Buffer
 import xyz.sakulik.d20.app.data.model.*
 import xyz.sakulik.d20.app.data.security.ApiProtocol
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
@@ -118,7 +120,7 @@ class LlmRepositoryImpl(
                 "Release 版本的 API Base URL 必须使用 HTTPS"
             }
         }
-        return when (protocol) {
+        val request = when (protocol) {
             ApiProtocol.ANTHROPIC -> buildAnthropicRequest(
                 baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
             )
@@ -128,6 +130,57 @@ class LlmRepositoryImpl(
             else -> buildChatCompletionsRequest(
                 baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
             )
+        }
+        logLlmRequest(protocol, request)
+        return request
+    }
+
+    private fun logLlmRequest(protocol: ApiProtocol, request: Request) {
+        if (!BuildConfig.DEBUG) return
+        val body = runCatching {
+            val buffer = Buffer()
+            request.body?.writeTo(buffer)
+            buffer.readUtf8()
+        }.getOrElse { exception -> "<无法读取请求正文：${exception.message}>" }
+        logTraffic(
+            "REQUEST id=${request.trafficId()} protocol=$protocol url=${request.safeLogUrl()}\n$body"
+        )
+    }
+
+    private fun logLlmResponse(
+        request: Request,
+        protocol: ApiProtocol,
+        status: String,
+        content: String
+    ) {
+        if (!BuildConfig.DEBUG) return
+        logTraffic(
+            "RESPONSE id=${request.trafficId()} protocol=$protocol status=$status\n" +
+                content.ifEmpty { "<empty>" }
+        )
+    }
+
+    private fun logTraffic(content: String) {
+        content.ifEmpty { "<empty>" }.chunked(LOGCAT_CHUNK_SIZE).forEachIndexed { index, chunk ->
+            Log.d(LLM_TRAFFIC_TAG, "[${index + 1}] $chunk")
+        }
+    }
+
+    private fun Request.trafficId(): String {
+        return Integer.toHexString(System.identityHashCode(this))
+    }
+
+    private fun Request.safeLogUrl(): String {
+        return url.run {
+            val hasCustomPort =
+                (scheme == "http" && port != 80) ||
+                    (scheme == "https" && port != 443)
+            val portSuffix = if (hasCustomPort) {
+                ":$port"
+            } else {
+                ""
+            }
+            "$scheme://$host$portSuffix$encodedPath"
         }
     }
 
@@ -170,6 +223,7 @@ class LlmRepositoryImpl(
                 model
             )
         ) {
+            if (!this@callbackFlow.isActive) return
             val request = try {
                 buildProtocolRequest(
                     baseUrl,
@@ -194,85 +248,111 @@ class LlmRepositoryImpl(
             activeCall = call
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
-                    if (!call.isCanceled()) {
-                        trySend(StreamState.Error(e))
-                        close(e)
-                    }
+                    if (call.isCanceled() || !this@callbackFlow.isActive) return
+                    trySend(StreamState.Error(e))
+                    close(e)
                 }
 
                 override fun onResponse(call: Call, response: Response) {
-                    if (!response.isSuccessful) {
-                        val errorBody = response.body?.string() ?: ""
-                        Log.w("LlmRepo", "Protocol $protocol returned HTTP ${response.code}: $errorBody")
-                        val fallbackMode = structuredOutputMode.fallbackMode(protocol)
-                        if (fallbackMode != null && response.code in STRUCTURED_OUTPUT_FALLBACK_CODES) {
-                            Log.i(
-                                "LlmRepo",
-                                "Structured output $structuredOutputMode unsupported -> retrying with $fallbackMode"
-                            )
-                            executeStream(protocol, structuredOutputMode = fallbackMode)
-                            return
-                        } else if (canFallback(protocol, response.code)) {
-                            Log.i("LlmRepo", "Fallback triggered -> Retrying with /v1/chat/completions")
-                            executeStream(
-                                ApiProtocol.CHAT_COMPLETIONS,
-                                preferredStructuredOutputMode(
-                                    baseUrl,
-                                    ApiProtocol.CHAT_COMPLETIONS,
-                                    model
+                    response.use {
+                        try {
+                            if (!response.isSuccessful) {
+                                val errorBody = response.body?.string() ?: ""
+                                logLlmResponse(
+                                    response.request,
+                                    protocol,
+                                    "HTTP ${response.code}",
+                                    errorBody
                                 )
-                            )
-                            return
-                        } else {
-                            trySend(StreamState.Error(IOException("API Error ${response.code}: $errorBody")))
-                            close()
-                            return
-                        }
-                    }
-
-                    response.body?.source()?.use { source ->
-                        while (!source.exhausted()) {
-                            val line = source.readUtf8Line() ?: break
-                            val chunk = parseStreamChunk(protocol, line)
-                            if (chunk.delta.isNotEmpty()) {
-                                fullContentBuffer.append(chunk.delta)
+                                Log.w("LlmRepo", "Protocol $protocol returned HTTP ${response.code}: $errorBody")
+                                val fallbackMode = structuredOutputMode.fallbackMode(protocol)
+                                if (
+                                    fallbackMode != null &&
+                                    response.code in STRUCTURED_OUTPUT_FALLBACK_CODES
+                                ) {
+                                    Log.i(
+                                        "LlmRepo",
+                                        "Structured output $structuredOutputMode unsupported -> retrying with $fallbackMode"
+                                    )
+                                    executeStream(protocol, structuredOutputMode = fallbackMode)
+                                    return
+                                } else if (canFallback(protocol, response.code)) {
+                                    Log.i("LlmRepo", "Fallback triggered -> Retrying with /v1/chat/completions")
+                                    executeStream(
+                                        ApiProtocol.CHAT_COMPLETIONS,
+                                        preferredStructuredOutputMode(
+                                            baseUrl,
+                                            ApiProtocol.CHAT_COMPLETIONS,
+                                            model
+                                        )
+                                    )
+                                    return
+                                } else {
+                                    trySend(
+                                        StreamState.Error(
+                                            IOException("API Error ${response.code}: $errorBody")
+                                        )
+                                    )
+                                    close()
+                                    return
+                                }
                             }
-                            if (chunk.completed) streamCompleted = true
-                            if (chunk.failure != null) {
-                                streamFailure = chunk.failure
-                            }
-                        }
-                    }
 
-                    if (streamFailure != null) {
-                        trySend(StreamState.Error(IOException(streamFailure)))
-                        close()
-                        return
-                    }
-                    if (!streamCompleted) {
-                        trySend(StreamState.Error(IOException("模型响应流未完整结束，已拒绝执行其中的事件")))
-                        close()
-                        return
-                    }
-                    val finalJson = fullContentBuffer.toString()
-                    val result = LlmJsonBuffer.parseAndRepair(finalJson)
-                    
-                    when (result) {
-                        is Either.Right -> {
-                            trySend(StreamState.TextChunk(result.value.narrative))
-                            trySend(StreamState.Completed(result.value))
-                            close()
-                        }
-                        is Either.Left -> {
-                            Log.e("LlmRepo", "Final structured response parse failed", result.value)
-                            trySend(
-                                StreamState.Error(
-                                    LlmResponseFormatException(
-                                        result.value.message ?: "模型没有返回有效的 JSON 响应",
-                                        result.value
+                            response.body?.source()?.use { source ->
+                                while (!source.exhausted()) {
+                                    val line = source.readUtf8Line() ?: break
+                                    val chunk = parseStreamChunk(protocol, line)
+                                    if (chunk.delta.isNotEmpty()) {
+                                        fullContentBuffer.append(chunk.delta)
+                                    }
+                                    if (chunk.completed) streamCompleted = true
+                                    if (chunk.failure != null) {
+                                        streamFailure = chunk.failure
+                                    }
+                                }
+                            }
+
+                            if (streamFailure != null) {
+                                trySend(StreamState.Error(IOException(streamFailure)))
+                                close()
+                                return
+                            }
+                            if (!streamCompleted) {
+                                trySend(
+                                    StreamState.Error(
+                                        IOException("模型响应流未完整结束，已拒绝执行其中的事件")
                                     )
                                 )
-                            )
+                                close()
+                                return
+                            }
+                            val finalJson = fullContentBuffer.toString()
+                            logLlmResponse(response.request, protocol, "STREAM COMPLETE", finalJson)
+                            val result = LlmJsonBuffer.parseAndRepair(finalJson)
+
+                            when (result) {
+                                is Either.Right -> {
+                                    trySend(StreamState.TextChunk(result.value.narrative))
+                                    trySend(StreamState.Completed(result.value))
+                                    close()
+                                }
+                                is Either.Left -> {
+                                    Log.e("LlmRepo", "Final structured response parse failed", result.value)
+                                    trySend(
+                                        StreamState.Error(
+                                            LlmResponseFormatException(
+                                                result.value.message ?: "模型没有返回有效的 JSON 响应",
+                                                result.value
+                                            )
+                                        )
+                                    )
+                                    close()
+                                }
+                            }
+                        } catch (exception: Exception) {
+                            if (call.isCanceled() || !this@callbackFlow.isActive) return
+                            Log.e("LlmRepo", "Stream response failed", exception)
+                            trySend(StreamState.Error(exception))
                             close()
                         }
                     }
@@ -523,42 +603,66 @@ class LlmRepositoryImpl(
             return@callbackFlow
         }
 
-        Log.d("LlmRepo", "chatRaw protocol: $protocol, URL: ${request.url}")
+        Log.d("LlmRepo", "chatRaw protocol: $protocol, URL: ${request.safeLogUrl()}")
 
         val call = client.newCall(request)
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                if (call.isCanceled() || !this@callbackFlow.isActive) return
                 trySend("错误: ${e.message}")
                 close()
             }
 
             override fun onResponse(call: Call, response: Response) {
-                if (!response.isSuccessful) {
-                    val errorBody = response.body?.string().orEmpty()
-                    val detail = errorBody.take(500)
-                        .takeIf { it.isNotBlank() }
-                        ?.let { ": $it" }
-                        .orEmpty()
-                    trySend("错误: HTTP ${response.code}$detail")
-                    close()
-                    return
-                }
-
-                var receivedAnyData = false
-                response.body?.source()?.use { source ->
-                    while (!source.exhausted()) {
-                        val line = source.readUtf8Line() ?: break
-                        val delta = parseChunkDelta(protocol, line)
-                        if (delta.isNotEmpty()) {
-                            receivedAnyData = true
-                            trySend(delta)
+                response.use {
+                    try {
+                        if (!response.isSuccessful) {
+                            val errorBody = response.body?.string().orEmpty()
+                            logLlmResponse(
+                                response.request,
+                                protocol,
+                                "HTTP ${response.code}",
+                                errorBody
+                            )
+                            val detail = errorBody.take(500)
+                                .takeIf { it.isNotBlank() }
+                                ?.let { ": $it" }
+                                .orEmpty()
+                            trySend("错误: HTTP ${response.code}$detail")
+                            close()
+                            return
                         }
+
+                        var receivedAnyData = false
+                        val responseBuffer = StringBuilder()
+                        response.body?.source()?.use { source ->
+                            while (!source.exhausted()) {
+                                val line = source.readUtf8Line() ?: break
+                                val delta = parseChunkDelta(protocol, line)
+                                if (delta.isNotEmpty()) {
+                                    receivedAnyData = true
+                                    responseBuffer.append(delta)
+                                    trySend(delta)
+                                }
+                            }
+                        }
+                        logLlmResponse(
+                            response.request,
+                            protocol,
+                            "STREAM COMPLETE",
+                            responseBuffer.toString()
+                        )
+                        if (!receivedAnyData) {
+                            trySend("错误: 未从服务器接收到有效的文字流。请检查模型名称是否正确。")
+                        }
+                        close()
+                    } catch (exception: Exception) {
+                        if (call.isCanceled() || !this@callbackFlow.isActive) return
+                        Log.e("LlmRepo", "Raw stream response failed", exception)
+                        trySend("错误: ${exception.message ?: "读取模型响应失败"}")
+                        close()
                     }
                 }
-                if (!receivedAnyData) {
-                    trySend("错误: 未从服务器接收到有效的文字流。请检查模型名称是否正确。")
-                }
-                close()
             }
         })
 
@@ -609,6 +713,7 @@ class LlmRepositoryImpl(
             ) StructuredOutputMode.JSON_OBJECT else StructuredOutputMode.NONE,
             formatRetryCount: Int = 0
         ) {
+            if (!this@callbackFlow.isActive) return
             val requestMessages = if (formatRetryCount == 0) {
                 messages
             } else {
@@ -634,55 +739,58 @@ class LlmRepositoryImpl(
                 return
             }
 
-            Log.d("LlmRepo", "genChar protocol: $protocol, URL: ${request.url}")
+            Log.d("LlmRepo", "genChar protocol: $protocol, URL: ${request.safeLogUrl()}")
             val call = client.newCall(request)
             activeCall = call
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
-                    if (!call.isCanceled()) {
-                        Log.e("LlmRepo", "genChar Failed", e)
-                        trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(e))
-                        close()
-                    }
+                    if (call.isCanceled() || !this@callbackFlow.isActive) return
+                    Log.e("LlmRepo", "genChar Failed", e)
+                    trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(e))
+                    close()
                 }
 
                 override fun onResponse(call: Call, response: Response) {
-                    try {
-                        val body = response.body?.string() ?: ""
+                    response.use {
+                        try {
+                            val body = response.body?.string() ?: ""
+                            logLlmResponse(response.request, protocol, "HTTP ${response.code}", body)
 
-                        if (!response.isSuccessful) {
-                            val fallbackMode = structuredOutputMode.fallbackMode(protocol)
-                            if (fallbackMode != null && response.code in STRUCTURED_OUTPUT_FALLBACK_CODES) {
-                                execute(protocol, fallbackMode, formatRetryCount)
+                            if (!response.isSuccessful) {
+                                val fallbackMode = structuredOutputMode.fallbackMode(protocol)
+                                if (fallbackMode != null && response.code in STRUCTURED_OUTPUT_FALLBACK_CODES) {
+                                    execute(protocol, fallbackMode, formatRetryCount)
+                                    return
+                                }
+                                if (canFallback(protocol, response.code)) {
+                                    execute(ApiProtocol.CHAT_COMPLETIONS)
+                                    return
+                                }
+                                trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(IOException("API Error ${response.code}: $body")))
+                                close()
                                 return
                             }
-                            if (canFallback(protocol, response.code)) {
-                                execute(ApiProtocol.CHAT_COMPLETIONS)
-                                return
-                            }
-                            trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(IOException("API Error ${response.code}: $body")))
+
+                            val content = extractResponseText(protocol, body)
+                            val character = json.decodeFromString<xyz.sakulik.d20.app.data.model.CharacterGenResponse>(
+                                extractJsonObject(content)
+                            )
+                            trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Success(character))
                             close()
-                            return
+                        } catch (e: Exception) {
+                            if (call.isCanceled() || !this@callbackFlow.isActive) return
+                            if (
+                                formatRetryCount < 1 &&
+                                (e is LlmResponseFormatException ||
+                                    e is kotlinx.serialization.SerializationException)
+                            ) {
+                                execute(protocol, structuredOutputMode, formatRetryCount + 1)
+                                return
+                            }
+                            Log.e("LlmRepo", "genChar Parse Error", e)
+                            trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(e))
+                            close()
                         }
-
-                        val content = extractResponseText(protocol, body)
-                        val character = json.decodeFromString<xyz.sakulik.d20.app.data.model.CharacterGenResponse>(
-                            extractJsonObject(content)
-                        )
-                        trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Success(character))
-                        close()
-                    } catch (e: Exception) {
-                        if (
-                            formatRetryCount < 1 &&
-                            (e is LlmResponseFormatException ||
-                                e is kotlinx.serialization.SerializationException)
-                        ) {
-                            execute(protocol, structuredOutputMode, formatRetryCount + 1)
-                            return
-                        }
-                        Log.e("LlmRepo", "genChar Parse Error", e)
-                        trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(e))
-                        close()
                     }
                 }
             })
@@ -719,6 +827,8 @@ class LlmRepositoryImpl(
         val STRUCTURED_OUTPUT_FALLBACK_CODES = setOf(400, 404, 405, 415, 422)
         val CHAT_SUCCESS_FINISH_REASONS = setOf("stop")
         val RESPONSES_FAILURE_EVENTS = setOf("response.incomplete", "response.failed", "error")
+        const val LLM_TRAFFIC_TAG = "LlmTraffic"
+        const val LOGCAT_CHUNK_SIZE = 3_500
     }
 }
 
