@@ -2,9 +2,10 @@ package xyz.sakulik.d20.app.data.local
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import xyz.sakulik.d20.app.domain.worldview.LEGACY_WORLDVIEW_PROMPT_PENDING
 
 object DatabaseMigrations {
-    private const val CURRENT_VERSION = 11
+    private const val CURRENT_VERSION = 12
     private val managedTables = listOf(
         "campaigns",
         "characters",
@@ -59,6 +60,7 @@ object DatabaseMigrations {
                 `core_setting` TEXT NOT NULL,
                 `custom_rules` TEXT NOT NULL,
                 `worldview_id` TEXT,
+                `worldview_prompt` TEXT NOT NULL,
                 `last_updated` INTEGER NOT NULL,
                 PRIMARY KEY(`id`)
             )""".trimIndent()
@@ -192,6 +194,11 @@ object DatabaseMigrations {
                 column("core_setting", "''", "coreSetting"),
                 column("custom_rules", "''", "customRules"),
                 nullableColumn("worldview_id", "worldviewId"),
+                column(
+                    "worldview_prompt",
+                    "'$LEGACY_WORLDVIEW_PROMPT_PENDING'",
+                    "worldviewPrompt"
+                ),
                 column("last_updated", currentTimeExpression, "lastUpdated")
             )
         )

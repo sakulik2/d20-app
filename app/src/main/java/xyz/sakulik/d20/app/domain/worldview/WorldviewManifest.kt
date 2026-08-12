@@ -2,6 +2,8 @@ package xyz.sakulik.d20.app.domain.worldview
 
 import kotlinx.serialization.Serializable
 
+const val LEGACY_WORLDVIEW_PROMPT_PENDING = "__legacy_worldview_prompt_pending__"
+
 @Serializable
 data class WorldviewManifest(
     val id: String,

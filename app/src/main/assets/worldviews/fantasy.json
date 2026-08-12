@@ -1,11 +1,11 @@
 {
     "id": "fantasy",
-    "name": "传统奇幻",
+    "name": "边境诸国",
     "author": "System",
     "version": "1.0",
-    "compatibleRulesets": ["any"],
-    "tags": ["经典", "魔法", "冒险"],
-    "tone": "High Fantasy",
-    "coreSetting": "一个充满魔法、巨龙与古老王国的世界。勇敢的冒险者在酒馆中集结，前往荒野探索未知的遗迹。",
-    "systemPromptPayload": "设定背景为传统 High Fantasy。魔法是世界的一部分，种族多样，正义与邪恶的界限清晰。强调宏大的叙事风格和英雄主义色彩。"
+    "compatibleRulesets": ["dnd_5e"],
+    "tags": ["沙盒", "边境", "低魔"],
+    "tone": "Gritty Frontier Fantasy",
+    "coreSetting": "旧帝国崩溃后的边境由互不信任的城邦、商路堡垒和荒野聚落瓜分。魔法确实存在，却稀少、昂贵且常被权力垄断；遗迹中的旧技术与失落契约比传说中的救世英雄更能改变一地命运。",
+    "systemPromptPayload": "以开放式沙盒和地方冲突为中心，让玩家选择决定盟友、敌人和聚落命运。避免预设唯一主线，也不要把善恶阵营写成无需调查即可判定的答案。"
 }

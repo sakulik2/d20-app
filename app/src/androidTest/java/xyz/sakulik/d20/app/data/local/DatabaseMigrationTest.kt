@@ -12,6 +12,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import xyz.sakulik.d20.app.domain.worldview.LEGACY_WORLDVIEW_PROMPT_PENDING
 
 @RunWith(AndroidJUnit4::class)
 class DatabaseMigrationTest {
@@ -128,6 +129,24 @@ class DatabaseMigrationTest {
         database.close()
     }
 
+    @Test
+    fun migrateVersionElevenAddsEmptyWorldviewPromptWithoutLosingCampaign() {
+        createVersionElevenFixture()
+
+        val database = Room.databaseBuilder(context, AppDatabase::class.java, DATABASE_NAME)
+            .addMigrations(*DatabaseMigrations.TO_CURRENT)
+            .allowMainThreadQueries()
+            .build()
+
+        val campaign = runBlocking {
+            database.campaignDao().getCampaignById(CAMPAIGN_ID)!!
+        }
+        assertEquals("旧设定世界", campaign.worldName)
+        assertEquals("forgotten_realms", campaign.worldviewId)
+        assertEquals(LEGACY_WORLDVIEW_PROMPT_PENDING, campaign.worldviewPrompt)
+        database.close()
+    }
+
     private fun createVersionSixFixture() {
         val path = context.getDatabasePath(DATABASE_NAME)
         path.parentFile?.mkdirs()
@@ -172,6 +191,30 @@ class DatabaseMigrationTest {
         db.execSQL("INSERT INTO combatants VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", arrayOf(CAMPAIGN_ID, "goblin", "地精", 12, 15, 7, 7, "[]", "[]", "[]", "{}"))
         db.execSQL("INSERT INTO combat_sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)", arrayOf(CAMPAIGN_ID, 2, "[\"player\",\"goblin\"]", 0, 18, 0, 1, 0))
         db.version = 9
+        db.close()
+    }
+
+    private fun createVersionElevenFixture() {
+        val path = context.getDatabasePath(DATABASE_NAME)
+        path.parentFile?.mkdirs()
+        val db = SQLiteDatabase.openOrCreateDatabase(path, null)
+        db.execSQL("PRAGMA foreign_keys=ON")
+        db.execSQL("CREATE TABLE campaigns (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, system_id TEXT NOT NULL, world_name TEXT NOT NULL, tone TEXT NOT NULL, core_setting TEXT NOT NULL, custom_rules TEXT NOT NULL, worldview_id TEXT, last_updated INTEGER NOT NULL)")
+        db.execSQL(
+            "INSERT INTO campaigns VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            arrayOf(
+                CAMPAIGN_ID,
+                "旧版设定剧本",
+                "dnd_5e",
+                "旧设定世界",
+                "冒险",
+                "旧核心设定",
+                "",
+                "forgotten_realms",
+                1L
+            )
+        )
+        db.version = 11
         db.close()
     }
 

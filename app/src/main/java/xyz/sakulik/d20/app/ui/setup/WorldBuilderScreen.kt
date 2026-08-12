@@ -89,6 +89,12 @@ fun WorldBuilderScreen(
                     contentPadding = PaddingValues(end = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    item {
+                        CustomWorldviewCard(
+                            isSelected = uiState.selectedWorldviewId == null,
+                            onClick = viewModel::useCustomSetting
+                        )
+                    }
                     items(uiState.presets) { preset ->
                         WorldviewCard(
                             preset = preset,
@@ -121,6 +127,7 @@ fun WorldBuilderScreen(
                     value = uiState.worldName,
                     onValueChange = { viewModel.onWorldNameChange(it) },
                     label = { Text("世界名称") },
+                    placeholder = { Text("例如：灰港群岛、阿卡姆调查") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -164,10 +171,19 @@ fun WorldBuilderScreen(
                 }
 
                 OutlinedTextField(
+                    value = uiState.worldviewPrompt,
+                    onValueChange = viewModel::onWorldviewPromptChange,
+                    label = { Text("模板叙事指导（仅叙事）") },
+                    supportingText = { Text("可编辑；不会覆盖角色卡、本地检定或战斗规则") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                OutlinedTextField(
                     value = uiState.customRules,
                     onValueChange = { viewModel.onCustomRulesChange(it) },
-                    label = { Text("附加房规/限制") },
-                    placeholder = { Text("例如：不可使用火药武器...") },
+                    label = { Text("叙事限制/偏好") },
+                    placeholder = { Text("例如：不出现火药武器；不改变本地规则判定") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -191,6 +207,50 @@ fun WorldBuilderScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(Icons.Default.ChevronRight, contentDescription = null)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun CustomWorldviewCard(
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(160.dp)
+            .height(120.dp)
+            .clickable(onClick = onClick)
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(12.dp)
+            ),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text("自定义设定", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "保留当前填写内容",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp).align(Alignment.End),
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }

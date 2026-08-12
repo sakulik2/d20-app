@@ -16,7 +16,7 @@ import androidx.room.TypeConverters
         CombatantEntity::class,
         CombatSessionEntity::class
     ], 
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

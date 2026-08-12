@@ -24,6 +24,8 @@ data class CampaignEntity(
     val customRules: String = "",
     @ColumnInfo(name = "worldview_id")
     val worldviewId: String? = null,
+    @ColumnInfo(name = "worldview_prompt")
+    val worldviewPrompt: String = "",
     @ColumnInfo(name = "last_updated")
     val lastUpdated: Long = System.currentTimeMillis()
 )

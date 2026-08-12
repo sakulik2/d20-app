@@ -11,6 +11,7 @@ import xyz.sakulik.d20.app.domain.common.updater.PluginRepository
 import xyz.sakulik.d20.app.domain.common.updater.PluginType
 import xyz.sakulik.d20.app.domain.worldview.WorldviewManifest
 import xyz.sakulik.d20.app.domain.worldview.WorldviewProvider
+import xyz.sakulik.d20.app.domain.worldview.LEGACY_WORLDVIEW_PROMPT_PENDING
 import xyz.sakulik.d20.app.ui.base.BaseViewModel
 import xyz.sakulik.d20.app.ui.base.UiEvent
 import xyz.sakulik.d20.app.ui.base.UiState
@@ -23,6 +24,7 @@ data class WorldBuilderUiState(
     val selectedWorldviewId: String? = null,
     val selectedTone: String = "",
     val coreSetting: String = "",
+    val worldviewPrompt: String = "",
     val customRules: String = "",
     val presets: List<WorldviewManifest> = emptyList(),
     val isLoading: Boolean = false,
@@ -99,7 +101,7 @@ class WorldBuilderViewModel(
                 rulesetId = canonicalRulesetId,
                 rulesetName = ruleset.name,
                 presets = allPresets,
-                worldName = "未命名世界",
+                worldName = "",
                 isLoading = true,
                 error = null
             )
@@ -117,11 +119,21 @@ class WorldBuilderViewModel(
                 }
 
                 updateState {
+                    val promptSnapshot = if (
+                        campaign.worldviewPrompt == LEGACY_WORLDVIEW_PROMPT_PENDING
+                    ) {
+                        allPresets.firstOrNull { preset ->
+                            preset.id == campaign.worldviewId
+                        }?.systemPromptPayload.orEmpty()
+                    } else {
+                        campaign.worldviewPrompt
+                    }
                     it.copy(
-                        worldName = campaign.worldName.ifBlank { "未命名世界" },
+                        worldName = campaign.worldName,
                         selectedWorldviewId = campaign.worldviewId,
                         selectedTone = campaign.tone,
                         coreSetting = campaign.coreSetting,
+                        worldviewPrompt = promptSnapshot,
                         customRules = campaign.customRules,
                         isLoading = false
                     )
@@ -138,17 +150,22 @@ class WorldBuilderViewModel(
     fun onWorldNameChange(name: String) = updateState { it.copy(worldName = name, error = null) }
     fun onToneChange(tone: String) = updateState { it.copy(selectedTone = tone, error = null) }
     fun onSettingChange(setting: String) = updateState { it.copy(coreSetting = setting, error = null) }
+    fun onWorldviewPromptChange(prompt: String) = updateState { it.copy(worldviewPrompt = prompt, error = null) }
     fun onCustomRulesChange(rules: String) = updateState { it.copy(customRules = rules, error = null) }
 
     fun applyPreset(preset: WorldviewManifest) {
         updateState { it.copy(
-            worldName = preset.name,
             selectedWorldviewId = preset.id,
             selectedTone = preset.tone,
             coreSetting = preset.coreSetting,
+            worldviewPrompt = preset.systemPromptPayload,
             customRules = preset.customRules,
             error = null
         ) }
+    }
+
+    fun useCustomSetting() {
+        updateState { it.copy(selectedWorldviewId = null, error = null) }
     }
 
     fun polishSetting() {
@@ -170,7 +187,8 @@ class WorldBuilderViewModel(
             - 规则系统：${state.rulesetName}
             - 世界名称：${state.worldName}
             - 游戏基调：${state.selectedTone}
-            - 房规/特殊要求：${state.customRules}
+            - 模板叙事指导：${state.worldviewPrompt}
+            - 叙事限制/偏好：${state.customRules}
             
             [待优化内容]
             ${state.coreSetting}
@@ -178,7 +196,7 @@ class WorldBuilderViewModel(
             请结合以上所有背景信息，将“待优化内容”扩写成一段约 200 字左右、充满氛围感、严谨且富有想象力的世界观设定。
             要求：
             1. 风格必须与“游戏基调”一致。
-            2. 如果有“房规”，请在设定中体现其对世界的影响。
+            2. 如果有叙事限制或偏好，请在文字层面体现，但不得改变规则判定。
             3. 请直接返回扩写后的文本，不要带有任何前缀或解释。
         """.trimIndent()
 
@@ -205,6 +223,7 @@ class WorldBuilderViewModel(
                 val sourceStillCurrent = currentState.coreSetting == originalSetting &&
                     currentState.worldName == state.worldName &&
                     currentState.selectedTone == state.selectedTone &&
+                    currentState.worldviewPrompt == state.worldviewPrompt &&
                     currentState.customRules == state.customRules &&
                     currentState.rulesetId == state.rulesetId
                 if (sourceStillCurrent) {
@@ -229,6 +248,7 @@ class WorldBuilderViewModel(
             worldName = state.worldName.trim(),
             selectedTone = state.selectedTone.trim(),
             coreSetting = state.coreSetting.trim(),
+            worldviewPrompt = state.worldviewPrompt.trim(),
             customRules = state.customRules.trim()
         )
         val validationError = validate(normalized)
@@ -249,6 +269,7 @@ class WorldBuilderViewModel(
                         worldviewId = normalized.selectedWorldviewId,
                         tone = normalized.selectedTone,
                         coreSetting = normalized.coreSetting,
+                        worldviewPrompt = normalized.worldviewPrompt,
                         customRules = normalized.customRules,
                         lastUpdated = System.currentTimeMillis()
                     )
@@ -282,6 +303,8 @@ class WorldBuilderViewModel(
         state.coreSetting.isBlank() -> "请填写核心设定。"
         state.coreSetting.length > MAX_CORE_SETTING_LENGTH ->
             "核心设定不能超过 $MAX_CORE_SETTING_LENGTH 个字符。"
+        state.worldviewPrompt.length > MAX_WORLDVIEW_PROMPT_LENGTH ->
+            "叙事指导不能超过 $MAX_WORLDVIEW_PROMPT_LENGTH 个字符。"
         state.customRules.length > MAX_CUSTOM_RULES_LENGTH ->
             "附加房规不能超过 $MAX_CUSTOM_RULES_LENGTH 个字符。"
         else -> null
@@ -291,6 +314,7 @@ class WorldBuilderViewModel(
         const val MAX_WORLD_NAME_LENGTH = 80
         const val MAX_TONE_LENGTH = 200
         const val MAX_CORE_SETTING_LENGTH = 6_000
+        const val MAX_WORLDVIEW_PROMPT_LENGTH = 3_000
         const val MAX_CUSTOM_RULES_LENGTH = 3_000
     }
 }

@@ -5,6 +5,7 @@ package xyz.sakulik.d20.app.domain.rules.dynamic
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import xyz.sakulik.d20.app.domain.worldview.WorldviewManifest
+import xyz.sakulik.d20.app.domain.worldview.WorldviewProvider
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
@@ -1004,6 +1005,35 @@ object RulesetProvider {
         val supportedTargetSources = setOf("EVENT", "STAT_VALUE")
         val supportedModifierSources = setOf("EVENT", "ABILITY_MODIFIER", "NONE")
         val supportedEquipmentBonusTargets = setOf("MODIFIER", "TARGET", "NONE")
+        val duplicateWorldviewIds = manifest.worldviewPresets
+            .groupingBy(WorldviewManifest::id)
+            .eachCount()
+            .filterValues { count -> count > 1 }
+            .keys
+        if (duplicateWorldviewIds.isNotEmpty()) {
+            errors.add(
+                RuleError(
+                    code = "DUPLICATE_WORLDVIEW_PRESET",
+                    message = "规则包内置设定 ID 重复：${duplicateWorldviewIds.sorted().joinToString()}"
+                )
+            )
+        }
+        manifest.worldviewPresets.forEach { preset ->
+            when {
+                !WorldviewProvider.isValidManifest(preset) -> errors.add(
+                    RuleError(
+                        code = "INVALID_WORLDVIEW_PRESET",
+                        message = "规则包内置设定 ${preset.id} 格式无效或尝试覆盖本地机制"
+                    )
+                )
+                !WorldviewProvider.isCompatibleWith(preset, manifest.id) -> errors.add(
+                    RuleError(
+                        code = "INCOMPATIBLE_WORLDVIEW_PRESET",
+                        message = "规则包内置设定 ${preset.id} 未声明兼容 ${manifest.id}"
+                    )
+                )
+            }
+        }
         if (checkRules.targetSource.trim().uppercase() !in supportedTargetSources) {
             errors.add(
                 RuleError(
