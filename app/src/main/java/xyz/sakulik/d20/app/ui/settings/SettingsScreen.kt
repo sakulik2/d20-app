@@ -239,6 +239,8 @@ fun SettingsScreen(
                 }
             }
 
+            ReleaseAppUpdateSection()
+
             if (showDebugDiceTesting) {
                 DebugDiceTestingSection()
             }

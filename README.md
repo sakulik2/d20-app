@@ -10,6 +10,7 @@ d20 是一个面向单人 TRPG 的 Android 应用原型。应用使用 Jetpack C
 - 先攻、回合资源、持续伤害/治疗效果及战斗恢复。
 - CommonMark Markdown 渲染和 Debug 专用 3D 骰子实验室。
 - 固定开发者服务器上的规则包与世界观包下载、校验和更新。
+- Release 构建可从官方 GitHub Releases 检查并下载新版 APK。
 
 ## 项目结构
 
@@ -38,6 +39,10 @@ app/src/androidTest/   Room、Compose 和设备测试
 最终用户不能新建、编辑、本地导入规则包，也不能修改下载源。规则包只能由开发者内置，或发布到应用固定的 HTTPS 索引后由客户端下载。下载器限制文件大小，在流式写入临时文件的同时计算 SHA-256，以严格的 32 字节摘要和常量时间比较核对索引，再验证 manifest ID、版本和完整规则契约；任一环节失败都不会替换已安装版本。若已登记下载包在后续加载时无法通过完整语义契约，应用会将其隔离为 `.rejected`、撤销登记，并回退同 ID 的内置包。远程包不能执行脚本、Kotlin 类或任意代码。
 
 开发者制作与发布规则包前，请阅读 [RULESET_AUTHORING.md](RULESET_AUTHORING.md)。本地问题清单与代理工作说明属于开发环境文件，不纳入产品仓库。
+
+## 发布应用更新
+
+应用更新入口只存在于 Release 构建的设置页，且仅在用户点击后访问官方仓库。发布正式 GitHub Release 时，使用 `vMAJOR.MINOR.PATCH`（例如 `v1.1.0`）作为 tag，并附加一个不超过 250 MiB 的 `.apk` asset；Draft、Prerelease、非三段版本号和非 APK 文件不会被客户端接受。下载完成后 Android 系统仍会核对 APK 签名并要求用户确认安装，因此后续版本必须继续使用与已安装版本相同的签名密钥。
 
 ## 开发约定
 

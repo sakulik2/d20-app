@@ -3,6 +3,8 @@ package xyz.sakulik.d20.app.domain.common.updater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
@@ -83,7 +85,7 @@ class UpdateChecker(
         } catch (e: Exception) {
             emit(UpdateCheckResult.Error("无法连接规则包服务器：${e.message ?: "未知网络错误"}"))
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     internal fun isVersionNewer(local: String, remote: String): Boolean {
         if (local == remote) return false

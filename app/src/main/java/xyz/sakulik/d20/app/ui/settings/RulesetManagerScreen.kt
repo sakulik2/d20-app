@@ -37,6 +37,16 @@ fun RulesetManagerScreen(
                     }
                 },
                 actions = {
+                    val hasAvailable = uiState.plugins.any {
+                        it is PluginUpdateState.UpdateAvailable || it is PluginUpdateState.NotInstalled
+                    }
+                    TextButton(
+                        onClick = viewModel::downloadAllAvailable,
+                        enabled = hasAvailable && !uiState.isDownloadingAll &&
+                            uiState.downloadProgressMap.isEmpty(),
+                    ) {
+                        Text(if (uiState.isDownloadingAll) "更新中" else "全部更新")
+                    }
                     IconButton(onClick = { viewModel.checkUpdates() }, enabled = !uiState.isChecking) {
                         Icon(Icons.Default.Refresh, contentDescription = "检查更新")
                     }

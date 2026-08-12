@@ -3,6 +3,7 @@ package xyz.sakulik.d20.app.ui.settings
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,7 @@ import xyz.sakulik.d20.app.domain.worldview.WorldviewProvider
 
 data class PluginManagerUiState(
     val isChecking: Boolean = false,
+    val isDownloadingAll: Boolean = false,
     val plugins: List<PluginUpdateState> = emptyList(),
     val downloadProgressMap: Map<String, Float> = emptyMap(),
     val errorMsg: String? = null
@@ -36,14 +38,18 @@ class PluginManagerViewModel(
 
     private val _uiState = MutableStateFlow(PluginManagerUiState())
     val uiState: StateFlow<PluginManagerUiState> = _uiState.asStateFlow()
+    private var checkJob: Job? = null
 
     init {
         checkUpdates()
     }
 
-    fun checkUpdates() {
-        _uiState.update { it.copy(isChecking = true, errorMsg = null) }
-        viewModelScope.launch {
+    fun checkUpdates(preserveError: Boolean = false) {
+        if (checkJob?.isActive == true) return
+        _uiState.update {
+            it.copy(isChecking = true, errorMsg = it.errorMsg.takeIf { preserveError })
+        }
+        checkJob = viewModelScope.launch {
             checker.checkUpdates(pluginType, PluginSources.indexUrl(pluginType)).collect { result ->
                 when (result) {
                     is UpdateCheckResult.Success -> {
@@ -51,7 +57,7 @@ class PluginManagerViewModel(
                             it.copy(
                                 isChecking = false,
                                 plugins = result.states,
-                                errorMsg = null
+                                errorMsg = it.errorMsg.takeIf { preserveError }
                             )
                         }
                     }
@@ -67,37 +73,75 @@ class PluginManagerViewModel(
 
     fun downloadPlugin(entry: RemotePluginEntry) {
         val id = entry.id
+        if (_uiState.value.downloadProgressMap.containsKey(id)) return
+        _uiState.update {
+            it.copy(downloadProgressMap = it.downloadProgressMap + (id to 0f))
+        }
         viewModelScope.launch {
-            downloader.downloadPlugin(entry) { downloadedId ->
-                // 下载成功后的回调：清理缓存
+            if (download(entry)) checkUpdates()
+        }
+    }
+
+    fun downloadAllAvailable() {
+        val entries = _uiState.value.plugins.mapNotNull { state ->
+            when (state) {
+                is PluginUpdateState.UpdateAvailable -> state.entry
+                is PluginUpdateState.NotInstalled -> state.entry
+                is PluginUpdateState.UpToDate -> null
+            }
+        }
+        if (entries.isEmpty() || _uiState.value.isDownloadingAll) return
+
+        _uiState.update { it.copy(isDownloadingAll = true, errorMsg = null) }
+        viewModelScope.launch {
+            var allSucceeded = true
+            try {
+                entries.forEach { entry ->
+                    if (!_uiState.value.downloadProgressMap.containsKey(entry.id)) {
+                        _uiState.update {
+                            it.copy(downloadProgressMap = it.downloadProgressMap + (entry.id to 0f))
+                        }
+                        if (!download(entry)) allSucceeded = false
+                    }
+                }
+            } finally {
+                _uiState.update { it.copy(isDownloadingAll = false) }
+            }
+            checkUpdates(preserveError = !allSucceeded)
+        }
+    }
+
+    private suspend fun download(entry: RemotePluginEntry): Boolean {
+        val id = entry.id
+        var succeeded = false
+        downloader.downloadPlugin(entry) { downloadedId ->
+            if (entry.type == PluginType.RULESET) {
                 RulesetRegistry.evictCache(downloadedId)
-            }.collect { state ->
-                when (state) {
-                    is DownloadState.Progress -> {
-                        _uiState.update { 
-                            val newMap = it.downloadProgressMap.toMutableMap()
-                            newMap[id] = state.percent
-                            it.copy(downloadProgressMap = newMap)
-                        }
+            }
+        }.collect { state ->
+            when (state) {
+                is DownloadState.Progress -> {
+                    _uiState.update {
+                        it.copy(downloadProgressMap = it.downloadProgressMap + (id to state.percent))
                     }
-                    is DownloadState.Success -> {
-                        _uiState.update { 
-                            val newMap = it.downloadProgressMap.toMutableMap()
-                            newMap.remove(id)
-                            it.copy(downloadProgressMap = newMap)
-                        }
-                        checkUpdates()
+                }
+                is DownloadState.Success -> {
+                    succeeded = true
+                    _uiState.update {
+                        it.copy(downloadProgressMap = it.downloadProgressMap - id)
                     }
-                    is DownloadState.Error -> {
-                        _uiState.update { 
-                            val newMap = it.downloadProgressMap.toMutableMap()
-                            newMap.remove(id)
-                            it.copy(downloadProgressMap = newMap, errorMsg = "下载 [$id] 失败: ${state.message}")
-                        }
+                }
+                is DownloadState.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            downloadProgressMap = it.downloadProgressMap - id,
+                            errorMsg = "下载 [$id] 失败: ${state.message}",
+                        )
                     }
                 }
             }
         }
+        return succeeded
     }
     
     fun clearError() {
