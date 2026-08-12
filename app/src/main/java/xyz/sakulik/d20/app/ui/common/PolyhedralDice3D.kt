@@ -206,8 +206,10 @@ private fun OpenGlDie(
     DisposableEffect(surfaceView) {
         surfaceView.onResume()
         onDispose {
-            surfaceView.onPause()
             surfaceView.visibility = android.view.View.GONE
+            surfaceView.setOnTouchListener(null)
+            renderer.setFrameRequester(null)
+            surfaceView.onPause()
         }
     }
 
@@ -549,9 +551,10 @@ private class DiceRenderer(private val mesh: DiceMesh) : GLSurfaceView.Renderer 
     private var angularVelocity = Vec3(310f, 430f, 190f)
     private var primary = floatArrayOf(0.25f, 0.45f, 0.95f, 1f)
     private var accent = floatArrayOf(0.6f, 0.25f, 0.95f, 1f)
+    @Volatile
     private var requestFrame: (() -> Unit)? = null
 
-    fun setFrameRequester(requester: () -> Unit) {
+    fun setFrameRequester(requester: (() -> Unit)?) {
         requestFrame = requester
     }
 

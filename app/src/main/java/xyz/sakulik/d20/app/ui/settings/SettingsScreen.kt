@@ -1,5 +1,6 @@
 package xyz.sakulik.d20.app.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -27,10 +28,30 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollState = rememberScrollState()
+    var showDebugDiceTesting by remember { mutableStateOf(true) }
+    var pendingNavigation by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val navigateAfterDebugCleanup: (() -> Unit) -> Unit = { navigate ->
+        if (pendingNavigation == null) {
+            pendingNavigation = navigate
+            showDebugDiceTesting = false
+        }
+    }
+
+    LaunchedEffect(showDebugDiceTesting, pendingNavigation) {
+        if (!showDebugDiceTesting) {
+            withFrameNanos { }
+            pendingNavigation?.invoke()
+            pendingNavigation = null
+        }
+    }
+
+    BackHandler {
+        navigateAfterDebugCleanup(onBack)
+    }
 
     CollectEvent(viewModel.uiEvent) { event ->
         when (event) {
-            is SettingsUiEvent.Back -> onBack()
+            is SettingsUiEvent.Back -> navigateAfterDebugCleanup(onBack)
         }
     }
 
@@ -45,7 +66,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("设置", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { navigateAfterDebugCleanup(onBack) }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 }
@@ -210,7 +231,7 @@ fun SettingsScreen(
                     )
 
                     OutlinedButton(
-                        onClick = onNavigateToUpdater,
+                        onClick = { navigateAfterDebugCleanup(onNavigateToUpdater) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("规则包更新中心")
@@ -218,7 +239,9 @@ fun SettingsScreen(
                 }
             }
 
-            DebugDiceTestingSection()
+            if (showDebugDiceTesting) {
+                DebugDiceTestingSection()
+            }
 
             if (uiState.error != null) {
                 Text(
