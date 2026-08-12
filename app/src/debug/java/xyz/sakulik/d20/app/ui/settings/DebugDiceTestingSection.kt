@@ -180,7 +180,6 @@ internal fun DebugDiceTestingSection() {
                         isRolling = true
                         testResult = null
                         sensory.playSound("dice_clatter")
-                        sensory.hapticDiceRolling()
                         delay(1000)
                         testResult = Random.nextInt(1, selectedDice.sides + 1)
                         isRolling = false

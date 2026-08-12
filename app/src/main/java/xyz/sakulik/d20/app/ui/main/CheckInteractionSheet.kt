@@ -445,6 +445,7 @@ fun VirtualDiceRoller(
     var result by remember { mutableIntStateOf(0) }
     var individualResults by remember { mutableStateOf(emptyList<Die>()) }
     var validationMessage by remember { mutableStateOf<String?>(null) }
+    var resultHaptic by remember { mutableStateOf<ResultHaptic?>(null) }
     val scope = rememberCoroutineScope()
 
     val previewDice = remember(expression) { parseDicePreview(expression) }
@@ -471,7 +472,16 @@ fun VirtualDiceRoller(
                     isRolling = rolling,
                     finalValue = die.value.takeIf { it > 0 },
                     size = 156.dp,
-                    onLandImpact = { sensory.hapticLandImpact() }
+                    onLandImpact = {
+                        sensory.hapticLandImpact()
+                        resultHaptic?.let { feedback ->
+                            resultHaptic = null
+                            scope.launch {
+                                delay(90)
+                                feedback.play(sensory)
+                            }
+                        }
+                    }
                 )
             } else {
                 Row(
@@ -485,7 +495,20 @@ fun VirtualDiceRoller(
                             isRolling = rolling,
                             finalValue = die.value.takeIf { it > 0 },
                             size = multiDiceSize,
-                            onLandImpact = { if (index == 0) sensory.hapticLandImpact() }
+                            onLandImpact = if (index == 0) {
+                                {
+                                    sensory.hapticLandImpact()
+                                    resultHaptic?.let { feedback ->
+                                        resultHaptic = null
+                                        scope.launch {
+                                            delay(90)
+                                            feedback.play(sensory)
+                                        }
+                                    }
+                                }
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -502,8 +525,8 @@ fun VirtualDiceRoller(
                     result = 0
                     individualResults = emptyList()
                     validationMessage = null
+                    resultHaptic = null
                     sensory.playSound("dice_clatter")
-                    sensory.hapticDiceRolling()
                     
                     // 模拟物理下坠与翻滚时长
                     delay(1000)
@@ -530,13 +553,13 @@ fun VirtualDiceRoller(
                     result = finalVal
                     rolling = false
                     
-                    if (submission.keptTerms.isNotEmpty() &&
+                    resultHaptic = if (submission.keptTerms.isNotEmpty() &&
                         submission.keptTerms.all { it.value == it.sides }
                     ) {
-                        sensory.hapticCriticalSuccess()
+                        ResultHaptic.CRITICAL_SUCCESS
                     } else if (finalVal == 1) {
-                        sensory.hapticCheckFailure()
-                    }
+                        ResultHaptic.FAILURE
+                    } else null
 
                     delay(1800)
                     onFinished(submission)
@@ -553,6 +576,18 @@ fun VirtualDiceRoller(
         validationMessage?.let { message ->
             Spacer(modifier = Modifier.height(8.dp))
             Text(message, color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+private enum class ResultHaptic {
+    CRITICAL_SUCCESS,
+    FAILURE;
+
+    fun play(sensory: SensoryController) {
+        when (this) {
+            CRITICAL_SUCCESS -> sensory.hapticCriticalSuccess()
+            FAILURE -> sensory.hapticCheckFailure()
         }
     }
 }

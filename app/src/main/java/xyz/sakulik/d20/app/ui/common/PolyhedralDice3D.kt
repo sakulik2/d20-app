@@ -18,11 +18,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import kotlinx.coroutines.delay
 import xyz.sakulik.d20.app.domain.rules.dynamic.DiceShape
 import xyz.sakulik.d20.app.domain.rules.dynamic.DiceType
 import java.nio.ByteBuffer
@@ -74,18 +71,6 @@ fun PolyhedralDice3D(
 
     val primary = MaterialTheme.colorScheme.primary
     val accent = MaterialTheme.colorScheme.tertiary
-    var wasRolling by remember(diceType) { mutableStateOf(false) }
-
-    LaunchedEffect(diceType, isRolling, finalValue) {
-        if (isRolling) {
-            wasRolling = true
-        } else if (wasRolling && finalValue != null) {
-            delay(620)
-            onLandImpact?.invoke()
-            wasRolling = false
-        }
-    }
-
     OpenGlDie(
         shape = diceType.shape,
         selectedFaceIndex = ((finalValue ?: diceType.sides) - 1)
@@ -94,7 +79,8 @@ fun PolyhedralDice3D(
         isRolling = isRolling,
         primary = primary,
         accent = accent,
-        modifier = Modifier.size(size)
+        modifier = Modifier.size(size),
+        onSettled = onLandImpact,
     )
 }
 
@@ -112,18 +98,6 @@ private fun PercentileDice3D(
     val accent = MaterialTheme.colorScheme.tertiary
     val gold = Color(0xFFD69E2E)
     val bronze = Color(0xFF7C2D12)
-    var wasRolling by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isRolling, finalValue) {
-        if (isRolling) {
-            wasRolling = true
-        } else if (wasRolling && finalValue != null) {
-            delay(620)
-            onLandImpact?.invoke()
-            wasRolling = false
-        }
-    }
-
     Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
         Row(
             modifier = Modifier.fillMaxSize(),
@@ -137,7 +111,8 @@ private fun PercentileDice3D(
                 isRolling = isRolling,
                 primary = gold,
                 accent = bronze,
-                modifier = Modifier.size(size * 0.46f)
+                modifier = Modifier.size(size * 0.46f),
+                onSettled = onLandImpact,
             )
             OpenGlDie(
                 shape = DiceShape.D10_DELTOID,
@@ -146,7 +121,8 @@ private fun PercentileDice3D(
                 isRolling = isRolling,
                 primary = primary,
                 accent = accent,
-                modifier = Modifier.size(size * 0.46f)
+                modifier = Modifier.size(size * 0.46f),
+                onSettled = null,
             )
         }
     }
@@ -160,10 +136,12 @@ private fun OpenGlDie(
     isRolling: Boolean,
     primary: Color,
     accent: Color,
-    modifier: Modifier
+    modifier: Modifier,
+    onSettled: (() -> Unit)?,
 ) {
     val context = LocalContext.current
     val renderer = remember(shape) { DiceRenderer(meshFor(shape)) }
+    val currentOnSettled = rememberUpdatedState(onSettled)
     val surfaceView = remember(shape) {
         GLSurfaceView(context).apply {
             setEGLContextClientVersion(2)
@@ -174,6 +152,9 @@ private fun OpenGlDie(
             setRenderer(renderer)
             renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
             renderer.setFrameRequester(::requestRender)
+            renderer.setOnSettledListener {
+                post { currentOnSettled.value?.invoke() }
+            }
             var previousX = 0f
             var previousY = 0f
             setOnTouchListener { view, event ->
@@ -209,6 +190,7 @@ private fun OpenGlDie(
             surfaceView.visibility = android.view.View.GONE
             surfaceView.setOnTouchListener(null)
             renderer.setFrameRequester(null)
+            renderer.setOnSettledListener(null)
             surfaceView.onPause()
         }
     }
@@ -553,9 +535,16 @@ private class DiceRenderer(private val mesh: DiceMesh) : GLSurfaceView.Renderer 
     private var accent = floatArrayOf(0.6f, 0.25f, 0.95f, 1f)
     @Volatile
     private var requestFrame: (() -> Unit)? = null
+    @Volatile
+    private var onSettled: (() -> Unit)? = null
+    private var impactPending = false
 
     fun setFrameRequester(requester: (() -> Unit)?) {
         requestFrame = requester
+    }
+
+    fun setOnSettledListener(listener: (() -> Unit)?) {
+        onSettled = listener
     }
 
     fun rotateBy(xDegrees: Float, yDegrees: Float) {
@@ -591,7 +580,9 @@ private class DiceRenderer(private val mesh: DiceMesh) : GLSurfaceView.Renderer 
                 Random.nextFloat() * 150f + 170f
             )
             settling = false
+            impactPending = false
         } else if (!rolling && (this.rolling || resultChanged)) {
+            if (this.rolling) impactPending = true
             settleStart = orientation
             settleTarget = settledOrientation(mesh.faces[selectedFace], mesh.vertices)
             settleElapsed = 0f
@@ -661,6 +652,10 @@ private class DiceRenderer(private val mesh: DiceMesh) : GLSurfaceView.Renderer 
             if (progress >= 1f) {
                 orientation = settleTarget
                 settling = false
+                if (impactPending) {
+                    impactPending = false
+                    onSettled?.invoke()
+                }
             }
         }
     }

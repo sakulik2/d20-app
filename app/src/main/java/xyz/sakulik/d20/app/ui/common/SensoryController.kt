@@ -76,21 +76,6 @@ class SensoryController private constructor(context: Context) {
                 vibrator.vibrate(25)
             }
         }
-        playSound("dice_clatter")
-    }
-
-    /**
-     * 骰子起掷：轻微干净的单次触觉反馈 (非循环)
-     */
-    fun hapticDiceRolling() {
-        safeVibrate {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(12, 120))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(12)
-            }
-        }
     }
 
     /**
