@@ -1,5 +1,6 @@
 package xyz.sakulik.d20.app.ui.settings
 
+import xyz.sakulik.d20.app.BuildConfig
 import xyz.sakulik.d20.app.data.security.ApiProtocol
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
 import xyz.sakulik.d20.app.ui.base.BaseViewModel
@@ -69,7 +70,11 @@ class SettingsViewModel(
         val error = when {
             apiKey.isBlank() -> "API Key 不能为空"
             baseUrl.isBlank() -> "API Base URL 不能为空"
-            !isValidHttpUrl(baseUrl) -> "API Base URL 必须是有效的 HTTP 或 HTTPS 地址"
+            !isValidApiUrl(baseUrl) -> if (BuildConfig.DEBUG) {
+                "API Base URL 必须是有效的 HTTP 或 HTTPS 地址"
+            } else {
+                "Release 版本的 API Base URL 必须使用 HTTPS"
+            }
             model.isBlank() -> "AI 模型名称不能为空"
             protocol == null -> "API 协议配置无效"
             else -> null
@@ -97,10 +102,11 @@ class SettingsViewModel(
         }
     }
 
-    private fun isValidHttpUrl(value: String): Boolean {
+    private fun isValidApiUrl(value: String): Boolean {
         return runCatching {
             val uri = java.net.URI(value)
-            uri.scheme in setOf("http", "https") && !uri.host.isNullOrBlank()
+            val allowedSchemes = if (BuildConfig.DEBUG) setOf("http", "https") else setOf("https")
+            uri.scheme?.lowercase() in allowedSchemes && !uri.host.isNullOrBlank()
         }.getOrDefault(false)
     }
 }

@@ -34,6 +34,10 @@ app/src/androidTest/   Room、Compose 和设备测试
 
 当前数据库版本为 11。首次编译后请确认 Room 生成 `app/schemas/xyz.sakulik.d20.app.data.local.AppDatabase/11.json`，并将其纳入版本控制。
 
+### DeepSeek 冒烟验证
+
+在设置中填写 `https://api.deepseek.com`、模型 `deepseek-chat`、自己的 API Key，并将协议保持为“默认”或选择“OpenAI Chat Completions”。新建存档后发送一个无需检定的动作，例如“环顾房间并描述眼前景象”：正常结果应显示一段叙事且不报 JSON 格式错误。随后发送一个有风险的动作，例如“撬开上锁的箱子”：正常结果应打开本地掷骰面板，提交结果后继续叙事。客户端会为 DeepSeek 使用 `response_format={"type":"json_object"}`，拒绝截断或无效事件，并在格式错误时自动重试一次。
+
 ## 规则包安全边界
 
 最终用户不能新建、编辑、本地导入规则包，也不能修改下载源。规则包只能由开发者内置，或发布到应用固定的 HTTPS 索引后由客户端下载。下载器限制文件大小，在流式写入临时文件的同时计算 SHA-256，以严格的 32 字节摘要和常量时间比较核对索引，再验证 manifest ID、版本和完整规则契约；任一环节失败都不会替换已安装版本。若已登记下载包在后续加载时无法通过完整语义契约，应用会将其隔离为 `.rejected`、撤销登记，并回退同 ID 的内置包。远程包不能执行脚本、Kotlin 类或任意代码。
@@ -42,7 +46,11 @@ app/src/androidTest/   Room、Compose 和设备测试
 
 ## 发布应用更新
 
-应用更新入口只存在于 Release 构建的设置页，且仅在用户点击后访问官方仓库。发布正式 GitHub Release 时，使用 `vMAJOR.MINOR.PATCH`（例如 `v1.1.0`）作为 tag，并附加一个不超过 250 MiB 的 `.apk` asset；Draft、Prerelease、非三段版本号和非 APK 文件不会被客户端接受。下载完成后 Android 系统仍会核对 APK 签名并要求用户确认安装，因此后续版本必须继续使用与已安装版本相同的签名密钥。
+应用更新入口只存在于 Release 构建的设置页，且仅在用户点击后访问官方仓库。每次发布前同时提高 `app/build.gradle.kts` 中的 `versionCode` 和三段式 `versionName`；GitHub Release 使用对应的 `vMAJOR.MINOR.PATCH`（例如 `v1.1.0`）作为 tag，并附加一个不超过 250 MiB 的 `.apk` asset。Draft、Prerelease、非三段版本号和非 APK 文件不会被客户端接受。下载完成后 Android 系统仍会核对更高的 `versionCode`、APK 签名并要求用户确认安装，因此后续版本必须继续使用与已安装版本相同的签名密钥。
+
+Release 构建启用 R8 代码压缩和资源收缩、禁止明文 HTTP，并保留可用于 mapping 还原的行号。Kotlin Serialization、Room、OkHttp 和 AndroidX Security 依赖各自的消费者规则；应用规则不再整包保留业务类。发布时保存 `app/build/outputs/mapping/release/mapping.txt`，它必须与对应 APK 一起归档。API Key 所在的 `llm_secure_prefs.xml` 已排除在云备份和设备迁移之外。
+
+正式签名从仓库根目录、已被 Git 忽略的 `keystore.properties` 读取。复制 `keystore.properties.example` 并填写 `storeFile`、`storePassword`、`keyAlias` 和 `keyPassword`；`storeFile` 相对于仓库根目录。未提供该文件时 Release 产物保持未签名，只适合静态检查，不能发布或覆盖安装。签名文件和密码必须离线备份；丢失后无法继续更新已安装应用。
 
 ## 开发约定
 

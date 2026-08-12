@@ -1,6 +1,7 @@
 package xyz.sakulik.d20.app.data.repository
 
 import android.util.Log
+import xyz.sakulik.d20.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -111,6 +112,12 @@ class LlmRepositoryImpl(
         structuredOutputMode: StructuredOutputMode = StructuredOutputMode.NONE,
         outputSpec: StructuredOutputSpec = TURN_OUTPUT_SPEC
     ): Request {
+        if (!BuildConfig.DEBUG) {
+            val uri = runCatching { java.net.URI(baseUrl.trim()) }.getOrNull()
+            require(uri?.scheme.equals("https", ignoreCase = true) && !uri?.host.isNullOrBlank()) {
+                "Release 版本的 API Base URL 必须使用 HTTPS"
+            }
+        }
         return when (protocol) {
             ApiProtocol.ANTHROPIC -> buildAnthropicRequest(
                 baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
@@ -150,7 +157,7 @@ class LlmRepositoryImpl(
         val model = keyManager.getModel()
         val primaryProtocol = determineProtocol(baseUrl)
 
-        Log.d("LlmRepo", "Primary protocol selected: $primaryProtocol")
+        runCatching { Log.d("LlmRepo", "Primary protocol selected: $primaryProtocol") }
 
         // 构造并发发请求逻辑，优先执行 primaryProtocol，如果遭遇 404/400/405 等错误，降级回退至 CHAT_COMPLETIONS
         var activeCall: Call? = null
