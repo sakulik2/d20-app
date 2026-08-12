@@ -29,10 +29,10 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
-        create("testing") {
+        create("instrumented") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".testing"
-            versionNameSuffix = "-testing"
+            applicationIdSuffix = ".instrumented"
+            versionNameSuffix = "-instrumented"
             matchingFallbacks += listOf("debug")
         }
         release {
@@ -44,9 +44,9 @@ android {
             )
         }
     }
-    testBuildType = "testing"
+    testBuildType = "instrumented"
     sourceSets {
-        getByName("testing") {
+        getByName("instrumented") {
             java.srcDir("src/debug/java")
             manifest.srcFile("src/debug/AndroidManifest.xml")
         }
@@ -124,6 +124,6 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-    add("testingImplementation", "androidx.compose.ui:ui-tooling")
-    add("testingImplementation", "androidx.compose.ui:ui-test-manifest")
+    add("instrumentedImplementation", "androidx.compose.ui:ui-tooling")
+    add("instrumentedImplementation", "androidx.compose.ui:ui-test-manifest")
 }
