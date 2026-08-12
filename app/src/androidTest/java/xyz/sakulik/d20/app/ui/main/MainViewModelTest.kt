@@ -1,6 +1,9 @@
 package xyz.sakulik.d20.app.ui.main
 
 import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -38,11 +41,13 @@ import xyz.sakulik.d20.app.domain.rules.dynamic.DiceSubmission
 class MainViewModelTest {
     private lateinit var context: Context
     private lateinit var database: AppDatabase
+    private lateinit var viewModelStore: ViewModelStore
 
     @Before
     fun setUp() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
         database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        viewModelStore = ViewModelStore()
         database.campaignDao().insertCampaign(
             CampaignEntity(
                 id = CAMPAIGN_ID,
@@ -71,6 +76,7 @@ class MainViewModelTest {
 
     @After
     fun tearDown() {
+        viewModelStore.clear()
         database.close()
     }
 
@@ -126,6 +132,7 @@ class MainViewModelTest {
         assertEquals("2d8+3", effectIntent.meta["expression"])
 
         viewModel.onDiceResult(DiceSubmission.manual("2d8+3", 11), effectIntent)
+        awaitRuleResultMessage()
         withTimeout(2_000) {
             database.combatantDao().observeByCampaign(CAMPAIGN_ID)
                 .first { combatants -> combatants.singleOrNull()?.hp == 9 }
@@ -180,6 +187,7 @@ class MainViewModelTest {
                 )
             )
         )
+        awaitRuleResultMessage()
         withTimeout(2_000) {
             database.combatantDao().observeByCampaign(CAMPAIGN_ID)
                 .first { combatants -> combatants.singleOrNull()?.hp == 3 }
@@ -210,7 +218,30 @@ class MainViewModelTest {
         }
     }
 
+    private suspend fun awaitRuleResultMessage() {
+        withTimeout(2_000) {
+            database.messageDao().getMessagesByCampaign(CAMPAIGN_ID).first { messages ->
+                messages.any { message ->
+                    message.isHidden && message.content.startsWith("[检定结果]")
+                }
+            }
+        }
+    }
+
     private fun createViewModel(): MainViewModel {
+        return ViewModelProvider(
+            viewModelStore,
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    require(modelClass == MainViewModel::class.java)
+                    return buildViewModel() as T
+                }
+            }
+        )[MainViewModel::class.java]
+    }
+
+    private fun buildViewModel(): MainViewModel {
         val contextAssembler = ContextAssembler(
             context = context,
             campaignDao = database.campaignDao(),
