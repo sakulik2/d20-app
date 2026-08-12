@@ -207,7 +207,7 @@ fun SettingsScreen(
                     )
 
                     Text(
-                        "限制发送给 AI 的历史对话轮数。数值越小响应越快、越省 Token；配合本地世界书 RAG 自动注入，不影响剧情连贯性。",
+                        "保留最近的完整对话回合；较早内容会生成本地提取式摘要，世界书按当前对话相关性召回。数值越大越连贯，但消耗更多上下文。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )

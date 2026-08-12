@@ -1,0 +1,79 @@
+package xyz.sakulik.d20.app.data.repository
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import xyz.sakulik.d20.app.data.local.LoreEntryEntity
+
+class LoreRetrievalPlannerTest {
+    @Test
+    fun currentInputRanksAboveHistoryOnlyMatch() {
+        val current = lore("current", "灰港", "灰港", updated = 1)
+        val historical = lore("historical", "旧王都", "王都", updated = 2)
+
+        val selected = LoreRetrievalPlanner.select(
+            entries = listOf(historical, current),
+            userText = "我们进入灰港",
+            recentMessages = listOf(message("刚刚离开王都"))
+        )
+
+        assertEquals(listOf("current", "historical"), selected.map(LoreEntryEntity::id))
+    }
+
+    @Test
+    fun supportsChineseKeywordSeparatorsAndEntryLimit() {
+        val entries = listOf(
+            lore("one", "第一条", "港口，码头"),
+            lore("two", "第二条", "商会；仓库"),
+            lore("three", "第三条", "水手\n船长")
+        )
+
+        val selected = LoreRetrievalPlanner.select(
+            entries = entries,
+            userText = "船长让我们去码头寻找商会",
+            recentMessages = emptyList(),
+            maxEntries = 2
+        )
+
+        assertEquals(2, selected.size)
+        assertTrue(selected.any { entry -> entry.id == "one" })
+        assertTrue(selected.any { entry -> entry.id == "two" })
+    }
+
+    @Test
+    fun excludesUnmatchedAndOverBudgetEntries() {
+        val oversized = lore("large", "灰港档案", "灰港", content = "x".repeat(100))
+        val fitted = lore("small", "灰港", "灰港", content = "短设定")
+        val unrelated = lore("other", "高山", "雪峰", content = "无关设定")
+
+        val selected = LoreRetrievalPlanner.select(
+            entries = listOf(oversized, fitted, unrelated),
+            userText = "抵达灰港",
+            recentMessages = emptyList(),
+            characterBudget = 20
+        )
+
+        assertEquals(listOf("small"), selected.map(LoreEntryEntity::id))
+    }
+
+    private fun lore(
+        id: String,
+        title: String,
+        keywords: String,
+        content: String = "设定内容",
+        updated: Long = 0
+    ) = LoreEntryEntity(
+        id = id,
+        campaignId = "campaign",
+        title = title,
+        keywords = keywords,
+        content = content,
+        lastUpdated = updated
+    )
+
+    private fun message(content: String) = MemoryMessage(
+        id = 1,
+        role = "assistant",
+        content = content
+    )
+}

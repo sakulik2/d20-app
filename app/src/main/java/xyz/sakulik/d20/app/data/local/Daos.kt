@@ -68,6 +68,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE campaign_id = :campaignId ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getRecentMessages(campaignId: String, limit: Int): List<MessageEntity>
 
+    @Query("SELECT * FROM messages WHERE campaign_id = :campaignId AND is_hidden = 0 ORDER BY id ASC")
+    suspend fun getVisibleMessagesForContext(campaignId: String): List<MessageEntity>
+
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun deleteMessageById(messageId: String)
 
@@ -75,7 +78,16 @@ interface MessageDao {
     suspend fun insertMessage(message: MessageEntity)
 
     @Query("DELETE FROM messages WHERE campaign_id = :campaignId")
-    suspend fun clearHistory(campaignId: String)
+    suspend fun clearMessages(campaignId: String)
+
+    @Query("DELETE FROM lore_entries WHERE campaign_id = :campaignId AND category = 'SYSTEM_CONVERSATION_MEMORY'")
+    suspend fun clearConversationMemory(campaignId: String)
+
+    @Transaction
+    suspend fun clearHistory(campaignId: String) {
+        clearMessages(campaignId)
+        clearConversationMemory(campaignId)
+    }
 }
 
 @Dao
@@ -98,8 +110,14 @@ interface ItemDao {
 
 @Dao
 interface LoreEntryDao {
-    @Query("SELECT * FROM lore_entries WHERE campaign_id = :campaignId AND is_enabled = 1")
+    @Query("SELECT * FROM lore_entries WHERE campaign_id = :campaignId AND is_enabled = 1 AND category != 'SYSTEM_CONVERSATION_MEMORY'")
     suspend fun getEnabledEntriesByCampaign(campaignId: String): List<LoreEntryEntity>
+
+    @Query("SELECT * FROM lore_entries WHERE campaign_id = :campaignId AND category = 'SYSTEM_CONVERSATION_MEMORY' LIMIT 1")
+    suspend fun getConversationMemory(campaignId: String): LoreEntryEntity?
+
+    @Query("DELETE FROM lore_entries WHERE campaign_id = :campaignId AND category = 'SYSTEM_CONVERSATION_MEMORY'")
+    suspend fun deleteConversationMemory(campaignId: String)
 
     @Query("SELECT * FROM lore_entries WHERE campaign_id = :campaignId AND title = :title LIMIT 1")
     suspend fun getEntryByTitle(campaignId: String, title: String): LoreEntryEntity?
