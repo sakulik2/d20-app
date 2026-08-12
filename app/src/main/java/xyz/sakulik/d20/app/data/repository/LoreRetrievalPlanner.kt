@@ -20,7 +20,7 @@ internal object LoreRetrievalPlanner {
             val title = entry.title.normalizeForRetrieval()
             val keywords = entry.keywords
                 .split(KEYWORD_SEPARATOR)
-                .map(String::normalizeForRetrieval)
+                .map { keyword -> keyword.normalizeForRetrieval() }
                 .filter { keyword -> keyword.length >= MIN_KEYWORD_LENGTH }
                 .distinct()
             val currentTitle = title.isNotEmpty() && title in currentText
