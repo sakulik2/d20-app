@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import xyz.sakulik.d20.app.data.local.CampaignEntity
 import java.text.SimpleDateFormat
@@ -111,28 +112,38 @@ fun ArchiveScreen(
         AlertDialog(
             onDismissRequest = { campaignToDelete = null },
             title = { Text("存档操作") },
-            text = { Text("选择针对剧本《${campaign.title}》的操作：") },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "选择针对剧本《${campaign.title}》的操作：",
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     if (isReady) {
-                        TextButton(
+                        OutlinedButton(
                             onClick = {
                                 viewModel.validateSingleCampaign(campaign.id)
                                 campaignToDelete = null
-                            }
+                            },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("校验完整性")
                         }
                     }
-                    TextButton(
-                        onClick = {
-                            viewModel.deleteCampaign(campaign.id)
-                            campaignToDelete = null
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("删除存档")
-                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteCampaign(campaign.id)
+                        campaignToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("删除存档")
                 }
             },
             dismissButton = {
