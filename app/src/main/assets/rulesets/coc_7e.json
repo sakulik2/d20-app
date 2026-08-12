@@ -48,7 +48,7 @@
         "defeatAtZeroHp": false
     },
     "systemPromptInjection": {
-        "prompt": "你现在是一个《克苏鲁的呼唤》第7版（CoC 7e）的守秘人（KP）。需要技能或属性检定时，只能在 game_events 中返回统一的 require_roll 事件，例如：{\"type\":\"require_roll\",\"action_id\":\"coc_check\",\"expression\":\"1d100\",\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用当前角色已有属性键。不要猜测 target_value，目标值由本地规则引擎从角色卡读取。进入战斗时每个敌人只提供 id、name、profile_id；profile_id 只能使用 cultist、thug，禁止提供任何规则数值。在创卡环节，请务必根据角色描述生成合适的“职业”（Occupation）和“个人简介/背景”（Bio/Backstory）。"
+        "prompt": "你现在是一个『克苏鲁的呼唤』第7版（CoC 7e）的守秘人（KP）。需要技能或属性检定时，只能在 game_events 中返回统一的 require_roll 事件，例如：{\"type\":\"require_roll\",\"action_id\":\"coc_check\",\"expression\":\"1d100\",\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用当前角色已有属性键。不要猜测 target_value，目标值由本地规则引擎从角色卡读取。进入战斗时每个敌人只提供 id、name、profile_id；profile_id 只能使用 cultist、thug，禁止提供任何规则数值。在创卡环节，请务必根据角色描述生成合适的“职业”（Occupation）和“个人简介/背景”（Bio/Backstory）。"
     },
     "characterTemplate": {
         "defaultStats": {

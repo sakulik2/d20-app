@@ -7,10 +7,24 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DynamicRulesetEngineTest {
+
+    @Test
+    fun textAndDropdownCreationFieldsAreOptionalUnlessDeclared() {
+        assertFalse(StringInputField(id = "bio", label = "背景").required)
+        assertFalse(
+            DropdownField(
+                id = "faction",
+                label = "阵营",
+                options = listOf("中立")
+            ).required
+        )
+        assertTrue(StringInputField(id = "name", label = "姓名", required = true).required)
+    }
 
     @Test
     fun detailedParserReturnsAuthorFacingJsonError() {

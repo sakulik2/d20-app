@@ -68,16 +68,18 @@ class ArchiveViewModel(
 
     private suspend fun validateAllCampaigns(list: List<CampaignEntity>) {
         if (validator == null) return
-        val resultsMap = uiState.value.validationResults.toMutableMap()
+        val criticalResults = mutableMapOf<String, IntegrityStatus>()
         list.forEach { campaign ->
             val status = try {
                 validator.validateAndRepair(campaign.id)
             } catch (exception: Exception) {
                 IntegrityStatus.Critical("校验失败：${exception.message ?: "未知错误"}")
             }
-            resultsMap[campaign.id] = status
+            if (status is IntegrityStatus.Critical) {
+                criticalResults[campaign.id] = status
+            }
         }
-        updateState { it.copy(validationResults = resultsMap) }
+        updateState { it.copy(validationResults = criticalResults) }
     }
 
     fun validateSingleCampaign(campaignId: String) {
@@ -89,7 +91,11 @@ class ArchiveViewModel(
                 IntegrityStatus.Critical("校验失败：${exception.message ?: "未知错误"}")
             }
             val resultsMap = uiState.value.validationResults.toMutableMap()
-            resultsMap[campaignId] = status
+            if (status is IntegrityStatus.Critical) {
+                resultsMap[campaignId] = status
+            } else {
+                resultsMap.remove(campaignId)
+            }
             
             val message = when (status) {
                 is IntegrityStatus.Healthy -> "存档状态完整，未发现数据缺失。"

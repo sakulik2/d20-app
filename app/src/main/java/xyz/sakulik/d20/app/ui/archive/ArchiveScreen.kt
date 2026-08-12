@@ -1,7 +1,11 @@
 package xyz.sakulik.d20.app.ui.archive
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,62 +41,141 @@ fun ArchiveScreen(
     val uiState by viewModel.uiState.collectAsState()
     var campaignToDelete by remember { mutableStateOf<CampaignEntity?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("我的冒险剧本", fontWeight = FontWeight.Bold) },
-                actions = {
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = { Text("我的冒险剧本", fontWeight = FontWeight.Bold) },
+                    actions = {
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "设置")
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                } else if (uiState.campaigns.isEmpty()) {
+                    EmptyArchiveView(modifier = Modifier.align(Alignment.Center))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(uiState.campaigns, key = { it.id }) { campaign ->
+                            CampaignCard(
+                                campaign = campaign,
+                                isReady = campaign.id in uiState.readyCampaignIds,
+                                integrityStatus = uiState.validationResults[campaign.id],
+                                onClick = {
+                                    onOpenCampaign(
+                                        campaign,
+                                        campaign.id in uiState.readyCampaignIds
+                                    )
+                                },
+                                onLongClick = { campaignToDelete = campaign }
+                            )
+                        }
                     }
                 }
-            )
-        }
-    ) { padding ->
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (uiState.campaigns.isEmpty()) {
-                EmptyArchiveView(modifier = Modifier.align(Alignment.Center))
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                FloatingActionButton(
+                    onClick = onNavigateToSetup,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(24.dp)
                 ) {
-                    items(uiState.campaigns, key = { it.id }) { campaign ->
-                        CampaignCard(
-                            campaign = campaign,
-                            isReady = campaign.id in uiState.readyCampaignIds,
-                            integrityStatus = uiState.validationResults[campaign.id],
-                            onClick = {
-                                onOpenCampaign(
-                                    campaign,
-                                    campaign.id in uiState.readyCampaignIds
-                                )
-                            },
-                            onLongClick = { campaignToDelete = campaign }
-                        )
-                    }
+                    Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
-            FloatingActionButton(
-                onClick = onNavigateToSetup,
-                containerColor = MaterialTheme.colorScheme.primary,
+        }
+
+        campaignToDelete?.let { campaign ->
+            BackHandler { campaignToDelete = null }
+            val panelInteractionSource = remember { MutableInteractionSource() }
+            val isReady = campaign.id in uiState.readyCampaignIds
+            Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp)
+                    .matchParentSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.48f))
+                    .clickable { campaignToDelete = null },
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = panelInteractionSource,
+                            indication = null,
+                            onClick = {}
+                        ),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 24.dp, vertical = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "存档操作",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "选择针对剧本『${campaign.title}』的操作：",
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (isReady) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.validateSingleCampaign(campaign.id)
+                                    campaignToDelete = null
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("校验完整性")
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                viewModel.deleteCampaign(campaign.id)
+                                campaignToDelete = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            )
+                        ) {
+                            Text("删除存档")
+                        }
+                        TextButton(
+                            onClick = { campaignToDelete = null },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("取消")
+                        }
+                    }
+                }
             }
         }
     }
 
-    // 校验结果弹窗
+    // 手动校验结果仍是一次性报告，不再作为卡片的常驻状态。
     uiState.activeMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { viewModel.clearActiveMessage() },
@@ -105,76 +188,19 @@ fun ArchiveScreen(
             }
         )
     }
-
-    // 删除与校验操作对话框
-    campaignToDelete?.let { campaign ->
-        val isReady = campaign.id in uiState.readyCampaignIds
-        AlertDialog(
-            onDismissRequest = { campaignToDelete = null },
-            title = { Text("存档操作") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "选择针对剧本《${campaign.title}》的操作：",
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (isReady) {
-                        OutlinedButton(
-                            onClick = {
-                                viewModel.validateSingleCampaign(campaign.id)
-                                campaignToDelete = null
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("校验完整性")
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteCampaign(campaign.id)
-                        campaignToDelete = null
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("删除存档")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { campaignToDelete = null }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
 }
 
 @Composable
-fun StatusBadge(status: xyz.sakulik.d20.app.domain.common.validator.IntegrityStatus) {
-    val (bgColor, textColor, text) = when (status) {
-        is xyz.sakulik.d20.app.domain.common.validator.IntegrityStatus.Healthy -> 
-            Triple(androidx.compose.ui.graphics.Color(0xFFE8F5E9), androidx.compose.ui.graphics.Color(0xFF2E7D32), "完整")
-        is xyz.sakulik.d20.app.domain.common.validator.IntegrityStatus.Repaired -> 
-            Triple(androidx.compose.ui.graphics.Color(0xFFFFF8E1), androidx.compose.ui.graphics.Color(0xFFF57F17), "已修补")
-        is xyz.sakulik.d20.app.domain.common.validator.IntegrityStatus.Critical -> 
-            Triple(androidx.compose.ui.graphics.Color(0xFFFFEBEE), androidx.compose.ui.graphics.Color(0xFFC62828), "异常")
-    }
-
+fun IntegrityErrorBadge() {
     Surface(
-        color = bgColor,
+        color = androidx.compose.ui.graphics.Color(0xFFFFEBEE),
         shape = MaterialTheme.shapes.extraSmall,
         modifier = Modifier.padding(start = 6.dp)
     ) {
         Text(
-            text = text,
+            text = "异常",
             style = MaterialTheme.typography.labelSmall,
-            color = textColor,
+            color = androidx.compose.ui.graphics.Color(0xFFC62828),
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
@@ -255,8 +281,10 @@ fun CampaignCard(
                     )
                     if (!isReady) {
                         DraftBadge()
-                    } else if (integrityStatus != null) {
-                        StatusBadge(integrityStatus)
+                    } else if (
+                        integrityStatus is xyz.sakulik.d20.app.domain.common.validator.IntegrityStatus.Critical
+                    ) {
+                        IntegrityErrorBadge()
                     }
                 }
                 val context = LocalContext.current

@@ -134,7 +134,7 @@ sealed class CreationField {
 data class StringInputField(
     override val id: String,
     override val label: String,
-    override val required: Boolean = true,
+    override val required: Boolean = false,
     override val visibilityCondition: String? = null,
     val hint: String? = null
 ) : CreationField()
@@ -166,7 +166,7 @@ data class DiceRollField(
 data class DropdownField(
     override val id: String,
     override val label: String,
-    override val required: Boolean = true,
+    override val required: Boolean = false,
     override val visibilityCondition: String? = null,
     val options: List<String>
 ) : CreationField()

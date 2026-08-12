@@ -64,7 +64,7 @@ app/src/main/assets/rulesets/my_system.json
   },
   "creationSchema": {
     "fields": [
-      { "type": "string", "id": "name", "label": "姓名" },
+      { "type": "string", "id": "name", "label": "姓名", "required": true },
       { "type": "point_buy", "id": "agility", "label": "敏捷", "min": 0, "max": 5 }
     ]
   },
@@ -95,6 +95,8 @@ app/src/main/assets/rulesets/my_system.json
   }
 }
 ```
+
+`string` 与 `dropdown` 字段默认可选；需要完整性校验强制补全时必须显式设置 `"required": true`。`point_buy` 与 `dice_roll` 默认必填。
 
 也可复制 `app/src/main/assets/rulesets/example_ruleset.json` 后修改。
 

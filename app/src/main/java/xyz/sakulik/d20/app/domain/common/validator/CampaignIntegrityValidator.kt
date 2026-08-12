@@ -42,7 +42,10 @@ class CampaignIntegrityValidator(
         // 2. 动态读取关联的规则系统契约 (支持 DND, CoC, 自定义 JSON 规则)
         val ruleset = RulesetRegistry.getRuleset(context, character.activeSystem)
         if (ruleset == null) {
-            repairLogs.add("提示: 规则系统 [${character.activeSystem}] 插件未找到，使用通用降级防护模式")
+            Log.w(
+                "IntegrityValidator",
+                "Ruleset ${character.activeSystem} is unavailable; skipping ruleset-specific repairs"
+            )
         }
 
         val schema = ruleset?.creationSchema
@@ -62,6 +65,7 @@ class CampaignIntegrityValidator(
 
         // 4. Schema 必填属性补全
         schema?.fields?.forEach { field ->
+            if (!field.required) return@forEach
             if (!mutableStats.containsKey(field.id) || mutableStats[field.id].toString().isBlank()) {
                 val fallbackVal = when (field) {
                     is PointBuyField -> field.min.toString()
