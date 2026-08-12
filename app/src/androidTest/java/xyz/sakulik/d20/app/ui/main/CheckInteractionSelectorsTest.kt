@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
@@ -18,11 +18,12 @@ import xyz.sakulik.d20.app.domain.rules.action.AttackAbility
 import xyz.sakulik.d20.app.domain.rules.action.SpellProfile
 import xyz.sakulik.d20.app.domain.rules.action.SpellResolutionType
 import xyz.sakulik.d20.app.domain.rules.action.WeaponProfile
+import xyz.sakulik.d20.app.ui.testing.ComposeTestActivity
 
 class CheckInteractionSelectorsTest {
 
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     @Test
     fun combatTargetSelectorChangesStableTargetId() {
