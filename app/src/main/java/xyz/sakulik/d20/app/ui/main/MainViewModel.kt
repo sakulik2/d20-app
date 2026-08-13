@@ -134,11 +134,7 @@ class MainViewModel(
         val savedStyle = keyManager.getThemeStyle()
         updateState { it.copy(themeStyle = TRPGThemeStyle.valueOf(savedStyle)) }
 
-        // 性能优化：延迟加载数据，错开导航动画最吃性能的前 300ms
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(300)
-            loadData()
-        }
+        loadData()
     }
 
     private fun loadData() {
@@ -1578,7 +1574,7 @@ class MainViewModel(
 
     private fun selectedSpell(intent: CheckIntent): SpellProfile? {
         val spellId = intent.meta["spell_id"].orEmpty()
-        return castableSpells().firstOrNull { it.spellId == spellId }
+        return uiState.value.preparedSpells.firstOrNull { it.spellId == spellId }
     }
 
     internal fun castableSpells(): List<SpellProfile> {

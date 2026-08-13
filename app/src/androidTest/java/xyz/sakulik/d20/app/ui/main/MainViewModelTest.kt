@@ -163,7 +163,11 @@ class MainViewModelTest {
         )
         val viewModel = createViewModel()
         withTimeout(2_000) {
-            viewModel.uiState.first { it.character != null && it.preparedSpells.isNotEmpty() }
+            viewModel.uiState.first {
+                it.character != null &&
+                    it.preparedSpells.isNotEmpty() &&
+                    1 in it.availableSpellSlotLevels
+            }
         }
         viewModel.handleGameEvents(
             listOf(
