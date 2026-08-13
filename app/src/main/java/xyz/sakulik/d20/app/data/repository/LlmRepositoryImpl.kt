@@ -736,11 +736,12 @@ class LlmRepositoryImpl(
             {"name":"角色姓名","stats":{"叙事字段ID":"简短文本"},"bio":"简短背景","items":[...]}
 
             name、stats 和 bio 只写叙事内容。数值属性、生命值、骰点、技能数值、
-            必须由本地规则系统处理。items 只列 3–5 件核心初始武器、护甲、工具或普通物品，
-            不要列法术、能力或整套物品包；名称不超过 20 字，描述不超过 60 字。
+            必须由本地规则系统处理。items 只列 3–5 件核心初始装备或规则包明确支持的法术，
+            不要列能力、整套物品包或无法确认属于该规则包的内容；名称不超过 20 字，描述不超过 60 字。
             每件物品必须有 name、description、category、modifiers。普通物品 modifiers={}；
             武器 modifiers 至少包含 damage_formula 与 damage_type，可再提供 attack_ability、
             proficient、damage_ability 和 targeting。不要填写由角色属性计算的攻击或伤害加值。
+            法术只能在规则包提示明确要求时返回，category 使用规则包约定的名称，modifiers 只填写规则包已声明的字段。
             不要解释、不要展示思考过程、不要使用 Markdown 代码块。""".trimIndent()
         val model = keyManager.getModel()
         val messages = listOf(ChatMessage("user", prompt))

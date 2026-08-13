@@ -450,11 +450,8 @@ class CreationViewModel(
         )
         val isWeapon = sanitized.category.contains("武器", ignoreCase = true) ||
             sanitized.category.contains("weapon", ignoreCase = true)
-        val isSpell = sanitized.category.contains("法术", ignoreCase = true) ||
-            sanitized.category.contains("spell", ignoreCase = true)
         return when {
             isWeapon && draft.toWeaponProfileOrNull() == null -> null
-            isSpell -> null
             else -> sanitized
         }
     }

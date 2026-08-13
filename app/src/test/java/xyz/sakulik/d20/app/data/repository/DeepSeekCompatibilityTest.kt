@@ -124,7 +124,7 @@ class DeepSeekCompatibilityTest {
             val prompt = request.getValue("messages").jsonArray.single()
                 .jsonObject.getValue("content").jsonPrimitive.content
             assertTrue(prompt.contains("3–5 件核心初始"))
-            assertTrue(prompt.contains("不要列法术"))
+            assertTrue(prompt.contains("规则包明确支持的法术"))
         }
         assertTrue(
             capturedBodies[1].contains("上一条响应被截断或格式无效")
