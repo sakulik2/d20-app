@@ -3,7 +3,7 @@ package xyz.sakulik.d20.app.ui.main.models
 import java.util.UUID
 
 /**
- * 模块 1：增强型消息模型 (UI 层使用)
+ * 模块 1：UI 层使用的增强型消息模型
  */
 data class ChatMessageUiModel(
     val id: String = UUID.randomUUID().toString(),

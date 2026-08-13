@@ -27,7 +27,7 @@ class Evaluator(private val formula: String) {
             rawRolls.add(Die(Random.nextInt(1, sides + 1), sides))
         }
 
-        // 处理修饰符 (kh, kl, dh, dl)
+        // 处理 kh、kl、dh、dl 修饰符
         var processedRolls = rawRolls.toList()
         node.modifiers.forEach { modifier ->
             processedRolls = applyModifier(processedRolls, modifier)

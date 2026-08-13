@@ -37,6 +37,7 @@ sealed class WorldBuilderUiEvent : UiEvent {
         val campaignId: String,
         val rulesetId: String
     ) : WorldBuilderUiEvent()
+    data object NavigateBack : WorldBuilderUiEvent()
     data class Error(val message: String) : WorldBuilderUiEvent()
 }
 
@@ -47,6 +48,7 @@ class WorldBuilderViewModel(
     private val repository: LlmRepository
 ) : BaseViewModel<WorldBuilderUiState, WorldBuilderUiEvent>(WorldBuilderUiState()) {
     private var initializedDraftKey: Pair<String, String>? = null
+    private var isExiting = false
 
     fun init(campaignId: String, rulesetId: String) {
         val ruleset = RulesetRegistry.getRuleset(context, rulesetId)
@@ -167,6 +169,35 @@ class WorldBuilderViewModel(
 
     fun useCustomSetting() {
         updateState { it.copy(selectedWorldviewId = null, error = null) }
+    }
+
+    fun exit(campaignId: String, discardDraft: Boolean) {
+        // 仅由显式返回操作调用；进入后台、进程回收和任务终止不得删除草稿。
+        if (isExiting) return
+        if (!discardDraft) {
+            sendEvent(WorldBuilderUiEvent.NavigateBack)
+            return
+        }
+
+        if (campaignId.isBlank()) {
+            sendEvent(WorldBuilderUiEvent.NavigateBack)
+            return
+        }
+
+        isExiting = true
+        viewModelScope.launch {
+            try {
+                campaignDao.deleteCampaign(campaignId)
+                sendEvent(WorldBuilderUiEvent.NavigateBack)
+            } catch (exception: Exception) {
+                isExiting = false
+                sendEvent(
+                    WorldBuilderUiEvent.Error(
+                        "无法丢弃未完成的创建内容：${exception.message ?: "未知错误"}"
+                    )
+                )
+            }
+        }
     }
 
     fun polishSetting() {

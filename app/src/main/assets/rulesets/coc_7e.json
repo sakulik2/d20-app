@@ -1,7 +1,7 @@
 {
     "id": "coc_7e",
     "name": "克苏鲁的呼唤 7E",
-    "description": "探索未知的恐怖，百分骰 (d100) 理智规则。",
+    "description": "探索未知的恐怖，使用 d100 百分骰与理智规则。",
     "version": "1.1.0",
     "quickActions": [
         {"id":"observe","label":"观察现场","description":"确认环境、出口和异常痕迹","kind":"NARRATIVE","payload":"我谨慎观察现场，确认出口、异常痕迹和可能的危险。"},
@@ -54,7 +54,7 @@
         "defeatAtZeroHp": false
     },
     "systemPromptInjection": {
-        "prompt": "你现在是一个『克苏鲁的呼唤』第7版（CoC 7e）的守秘人（KP）。需要技能或属性检定时，只能在 game_events 中返回统一的 require_roll 事件，例如：{\"type\":\"require_roll\",\"action_id\":\"coc_check\",\"expression\":\"1d100\",\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用当前角色已有属性键。不要猜测 target_value，目标值由本地规则引擎从角色卡读取。进入战斗时每个敌人只提供 id、name、profile_id；profile_id 只能使用 cultist、thug，禁止提供任何规则数值。在创卡环节，请务必根据角色描述生成合适的“职业”（Occupation）和“个人简介/背景”（Bio/Backstory）。"
+        "prompt": "你现在是《克苏鲁的呼唤》第七版的守秘人。需要技能或属性检定时，只能在 game_events 中返回统一的 require_roll 事件，例如：{\"type\":\"require_roll\",\"action_id\":\"coc_check\",\"expression\":\"1d100\",\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用当前角色已有属性键。不要猜测 target_value，目标值由本地规则引擎从角色卡读取。进入战斗时每个敌人只提供 id、name、profile_id；profile_id 只能使用 cultist、thug，禁止提供任何规则数值。在创卡环节，请务必根据角色描述生成合适的职业和个人简介。"
     },
     "characterTemplate": {
         "defaultStats": {
@@ -87,13 +87,13 @@
             {
                 "type": "string",
                 "id": "occupation",
-                "label": "职业 (Occupation)",
+                "label": "职业",
                 "hint": "如：私家侦探、教授、古董商等"
             },
             {
                 "type": "string",
                 "id": "age",
-                "label": "年龄 (Age)",
+                "label": "年龄",
                 "hint": "建议 15-90 岁"
             },
             {
@@ -102,14 +102,14 @@
                 "label": "时代背景",
                 "options": [
                     "1920s 经典",
-                    "现代 (Modern)",
-                    "煤气灯时代 (Victorian)"
+                    "现代",
+                    "煤气灯时代"
                 ]
             },
             {
                 "type": "point_buy",
                 "id": "str",
-                "label": "力量 (STR)",
+                "label": "力量",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -117,7 +117,7 @@
             {
                 "type": "point_buy",
                 "id": "dex",
-                "label": "敏捷 (DEX)",
+                "label": "敏捷",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -125,7 +125,7 @@
             {
                 "type": "point_buy",
                 "id": "con",
-                "label": "体质 (CON)",
+                "label": "体质",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -133,7 +133,7 @@
             {
                 "type": "point_buy",
                 "id": "app",
-                "label": "外貌 (APP)",
+                "label": "外貌",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -141,7 +141,7 @@
             {
                 "type": "point_buy",
                 "id": "pow",
-                "label": "意志 (POW)",
+                "label": "意志",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -149,7 +149,7 @@
             {
                 "type": "point_buy",
                 "id": "siz",
-                "label": "体型 (SIZ)",
+                "label": "体型",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -157,7 +157,7 @@
             {
                 "type": "point_buy",
                 "id": "int",
-                "label": "智力 (INT)",
+                "label": "智力",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -165,7 +165,7 @@
             {
                 "type": "point_buy",
                 "id": "edu",
-                "label": "教育 (EDU)",
+                "label": "教育",
                 "min": 15,
                 "max": 90,
                 "costMultiplier": 1
@@ -173,7 +173,7 @@
             {
                 "type": "dice_roll",
                 "id": "luck",
-                "label": "初始幸运 (Luck)",
+                "label": "初始幸运",
                 "formula": "3d6*5"
             }
         ]

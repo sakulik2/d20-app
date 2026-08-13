@@ -24,7 +24,7 @@ import xyz.sakulik.d20.app.ui.theme.TRPGTheme
 import xyz.sakulik.d20.app.ui.theme.TRPGThemeStyle
 
 /**
- * 主交互界面 (MainChatScreen)
+ * 主交互界面
  * 实现 SSOT 聚合状态、解耦组件与沉浸式主题适配
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -160,7 +160,7 @@ fun MainChatScreen(
                     }
                 }
 
-                // 交互层覆盖物：死亡豁免追踪 (Death Save Tracker)
+                // 交互层覆盖物：死亡豁免追踪
                 if (uiState.isDying && !uiState.isDeathSaveRollInProgress) {
                     AlertDialog(
                         onDismissRequest = { /* 濒死状态不可随意关闭 */ },
@@ -189,7 +189,7 @@ fun MainChatScreen(
                 }
 
 
-                // 交互层覆盖物：背包 (Inventory Sheet)
+                // 交互层覆盖物：背包
                 if (uiState.isInventoryVisible) {
                     InventorySheet(
                         items = uiState.inventory,

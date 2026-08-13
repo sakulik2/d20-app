@@ -40,7 +40,7 @@ class ChatViewModel(
             repository.chatStream("https://api.openai.com", messages).collect { state ->
                 when (state) {
                     is StreamState.TextChunk -> {
-                        // 收到文本碎片，立即追加到 UI 状态中 (实现打字机效果)
+                        // 收到文本碎片后立即追加到 UI 状态，实现打字机效果。
                         updateState { it.copy(narrative = it.narrative + state.delta) }
                     }
                     is StreamState.PreviewReplacement -> {

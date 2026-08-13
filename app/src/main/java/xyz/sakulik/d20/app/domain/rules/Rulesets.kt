@@ -31,7 +31,7 @@ object RulesetRegistry {
                 SystemMetadata(
                     id = id,
                     name = ruleset.name,
-                    description = ruleset.description ?: "TRPG 规则系统 (v${ruleset.version})"
+                    description = ruleset.description ?: "TRPG 规则系统 · 版本 ${ruleset.version}"
                 )
             }
         }

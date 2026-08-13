@@ -125,7 +125,7 @@ data class AnthropicError(
 )
 
 /**
- * OpenAI Responses API 模型 (v1/responses)
+ * OpenAI Responses API 的 v1/responses 模型
  */
 @Serializable
 data class ResponsesRequest(

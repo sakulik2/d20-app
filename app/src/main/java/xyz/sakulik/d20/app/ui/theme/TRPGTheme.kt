@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * 模块 2：规则集与主题风格的映射表 (Theme Palette Picker)
+ * 模块 2：规则集与主题风格的映射表
  */
 @Composable
 fun provideTRPGTheme(rulesetId: String, style: TRPGThemeStyle = TRPGThemeStyle.AUTO): TRPGColors {
@@ -115,7 +115,7 @@ fun provideTRPGTheme(rulesetId: String, style: TRPGThemeStyle = TRPGThemeStyle.A
 }
 
 /**
- * 模块 3：实现自定义 Theme Provider 组件 (带动画平滑过渡)
+ * 模块 3：实现带平滑过渡动画的自定义主题组件
  */
 @Composable
 fun TRPGTheme(
@@ -134,7 +134,7 @@ fun TRPGTheme(
 
     val animationSpec = if (skipAnimation) snap<Color>() else tween<Color>(500)
     
-    // 平滑过渡动画 (关键逻辑：animateColorAsState)
+    // 使用 animateColorAsState 实现平滑过渡动画。
     val animatedPrimary = animateColorAsState(targetColors.primaryAccent, animationSpec, label = "primary")
     val animatedSurface = animateColorAsState(targetColors.narrativeSurface, animationSpec, label = "surface")
     val animatedPanel = animateColorAsState(targetColors.panelBackground, animationSpec, label = "panel")

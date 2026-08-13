@@ -71,7 +71,7 @@ private const val DND_CAST_ACTION_ID = "dnd_cast"
 private const val DND_SPELL_EFFECT_ACTION_ID = "dnd_spell_effect"
 private const val COMBAT_INITIATIVE_ACTION_ID = "combat_initiative"
 /**
- * 聚合 UI 状态 (SSOT)
+ * 聚合 UI 状态，作为单一事实来源
  */
 data class MainUiState(
     val messages: List<ChatMessageUiModel> = emptyList(),

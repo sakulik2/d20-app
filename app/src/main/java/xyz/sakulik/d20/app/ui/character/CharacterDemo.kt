@@ -41,7 +41,7 @@ class CharacterViewModel : BaseViewModel<CharacterUiState, CharacterUiEvent>(
     }
 
     fun requestSanityCheck() {
-        sendEvent(CharacterUiEvent.ShowDiceDialog("需要进行理智检定 (Sanity Check)"))
+        sendEvent(CharacterUiEvent.ShowDiceDialog("需要进行理智检定"))
     }
 }
 

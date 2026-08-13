@@ -50,7 +50,7 @@ class SetupViewModel(
         ) }
     }
 
-    // 动态获取全量安装的规则系统元数据列表 (支持用户从规则更新中心导入的自定义规则包)
+    // 动态获取全量安装的规则系统元数据列表，包含用户导入的自定义规则包。
     fun getAvailableSystems(): List<xyz.sakulik.d20.app.domain.rules.SystemMetadata> {
         return RulesetRegistry.getMetadataList(context)
     }
@@ -110,14 +110,14 @@ class SetupViewModel(
         updateState { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             try {
-                // 1. 安全保存 Key 和 Base URL (仅当显示时)
+                // 1. 仅在配置项显示时安全保存 Key 和 Base URL
                 if (state.showApiConfig) {
                     keyManager.saveKey(apiKey)
                     keyManager.saveBaseUrl(baseUrl)
                     keyManager.saveModel(model)
                 }
 
-                // 2. 创建新剧本 (Campaign)
+                // 2. 创建新剧本
                 val campaignId = UUID.randomUUID().toString()
                 val newCampaign = CampaignEntity(
                     id = campaignId,

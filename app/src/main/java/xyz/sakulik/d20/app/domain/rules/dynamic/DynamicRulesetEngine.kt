@@ -22,7 +22,7 @@ import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.ExperimentalSerializationApi
 
 // ==========================================
-// 模块 1：云端规则包协议定义 (Ruleset Manifest)
+// 模块 1：云端规则包协议定义
 // ==========================================
 
 @Serializable
@@ -150,7 +150,7 @@ data class MechanicsPipeline(
 )
 
 // ==========================================
-// 模块 1.1：创卡蓝图模型 (Creation Schema)
+// 模块 1.1：创卡蓝图模型
 // ==========================================
 
 @Serializable
@@ -210,7 +210,7 @@ data class DropdownField(
 ) : CreationField()
 
 // ==========================================
-// 模块 2：逻辑流水线解析器 (AST Engine)
+// 模块 2：逻辑流水线解析器
 // ==========================================
 
 @Serializable
@@ -317,7 +317,7 @@ data class EffectNode(
 ) : LogicNode()
 
 // ==========================================
-// 模块 3：双向协议模型 (LLM Bridge)
+// 模块 3：双向协议模型
 // ==========================================
 
 data class CheckIntent(
@@ -461,7 +461,7 @@ class DynamicRulesetImpl(private val manifest: RulesetManifest) : IRuleset {
         var loopGuard = 0
         val MAX_ITERATIONS = 100
 
-        logs.add("启动动态规则引擎: ${manifest.id} (Action: ${intent.actionId})")
+        logs.add("启动动态规则引擎：${manifest.id}，动作：${intent.actionId}")
 
         // 3. 遍历执行 AST
         while (currentNodeId != null && loopGuard < MAX_ITERATIONS) {
@@ -982,7 +982,7 @@ private class RuleEvaluationException(
 ) : IllegalStateException(message)
 
 // ==========================================
-// 模块 5：系统工厂 (RulesetProvider)
+// 模块 5：系统工厂
 // ==========================================
 
 @OptIn(InternalSerializationApi::class, ExperimentalSerializationApi::class)

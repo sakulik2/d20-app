@@ -27,7 +27,7 @@ fun WorldviewManagerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设定集市 (Worldview)") },
+                title = { Text("设定集市") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")

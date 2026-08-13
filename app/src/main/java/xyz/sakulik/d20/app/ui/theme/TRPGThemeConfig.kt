@@ -17,11 +17,11 @@ enum class TRPGThemeStyle {
 }
 
 /**
- * 模块 1：定义自定义主题属性类 (TRPGColors)
+ * 模块 1：定义自定义颜色属性
  */
 @Immutable
 data class TRPGColors(
-    val primaryAccent: Color,      // 强调色 (按钮、高亮)
+    val primaryAccent: Color,      // 按钮与高亮使用的强调色
     val narrativeSurface: Color,   // 叙事区主背景
     val panelBackground: Color,    // 底部面板背景
     val dividerColor: Color,      // 装饰性分割线
@@ -35,13 +35,13 @@ data class TRPGColors(
 )
 
 /**
- * 模块 1：定义自定义主题属性类 (TRPGTypography)
+ * 模块 1：定义自定义排版属性
  */
 @Immutable
 data class TRPGTypography(
     val narrativeBody: TextStyle, // 叙事正文字体
     val diceNumber: TextStyle,    // 骰子数字专属字体
-    val titleSerif: TextStyle     // 规则标题 (衬线体)
+    val titleSerif: TextStyle     // 规则标题使用的衬线体
 )
 
 val LocalTRPGColors = staticCompositionLocalOf {

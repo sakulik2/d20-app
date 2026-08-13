@@ -36,7 +36,7 @@
         "defeatAtZeroHp": false
     },
     "systemPromptInjection": {
-        "prompt": "你是一个通用跑团主持人（TRPG GM）。需要检定时，在 game_events 中返回统一事件，例如：{\"type\":\"require_roll\",\"action_id\":\"d20_check\",\"expression\":\"1d20\",\"threshold\":12,\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用角色已有属性键。进入战斗时只可引用 profile_id=adversary，不得提供任何规则数值。"
+        "prompt": "你是一个通用跑团主持人。需要检定时，在 game_events 中返回统一事件，例如：{\"type\":\"require_roll\",\"action_id\":\"d20_check\",\"expression\":\"1d20\",\"threshold\":12,\"stat_id\":\"dex\",\"reason\":\"敏捷检定\"}。stat_id 必须引用角色已有属性键。进入战斗时只可引用 profile_id=adversary，不得提供任何规则数值。"
     },
     "characterTemplate": {
         "defaultStats": {

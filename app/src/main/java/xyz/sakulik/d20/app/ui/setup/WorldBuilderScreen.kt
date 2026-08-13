@@ -1,5 +1,6 @@
 package xyz.sakulik.d20.app.ui.setup
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -31,6 +32,7 @@ fun WorldBuilderScreen(
     viewModel: WorldBuilderViewModel,
     onNavigateToCreation: (campaignId: String, rulesetId: String) -> Unit,
     onNavigateToMarket: () -> Unit,
+    onExit: () -> Unit,
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -42,6 +44,7 @@ fun WorldBuilderScreen(
                 is WorldBuilderUiEvent.NavigateToCreation -> {
                     onNavigateToCreation(event.campaignId, event.rulesetId)
                 }
+                WorldBuilderUiEvent.NavigateBack -> onBack()
                 is WorldBuilderUiEvent.Error -> {
                     snackbarHostState.showSnackbar(event.message)
                 }
@@ -49,12 +52,14 @@ fun WorldBuilderScreen(
         }
     }
 
+    BackHandler(onBack = onExit)
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("世界观构建器") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onExit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },

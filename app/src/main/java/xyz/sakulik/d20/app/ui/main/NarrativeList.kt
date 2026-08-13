@@ -29,7 +29,7 @@ import xyz.sakulik.d20.app.ui.theme.TRPGTheme
 import xyz.sakulik.d20.app.ui.common.SensoryController
 
 /**
- * 模块 2：沉浸式打字机渲染器 (TypewriterText)
+ * 模块 2：沉浸式打字机渲染器
  * 流式内容与历史消息共用标准 Markdown AST 渲染器
  */
 @Composable

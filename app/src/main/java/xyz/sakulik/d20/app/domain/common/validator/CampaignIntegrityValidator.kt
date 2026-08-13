@@ -85,7 +85,7 @@ class CampaignIntegrityValidator(
             if (!mutableStats.containsKey("san") || (mutableStats["san"]?.toIntOrNull() ?: 0) <= 0) {
                 mutableStats["san"] = pow.toString()
                 statRepaired = true
-                repairLogs.add("根据 意志 (POW=$pow) 自动智能恢复理智 (SAN=$pow)")
+                repairLogs.add("根据意志值 $pow 自动恢复理智值 $pow")
             }
         }
 

@@ -13,8 +13,8 @@ data class LoadedPlugin<T>(
 )
 
 /**
- * 通用插件仓库 (Ruleset & Worldview)
- * 三级读取策略：FilesDir (Sandbox) -> Assets -> Error
+ * 规则包与设定集的通用插件仓库
+ * 三级读取策略：应用文件目录 -> 内置资源 -> 错误
  */
 class PluginRepository(private val context: Context) {
 

@@ -12,7 +12,7 @@ import java.net.URL
 import java.io.ByteArrayOutputStream
 
 /**
- * 通用插件更新检测器 (UpdateChecker)
+ * 通用插件更新检测器
  */
 class UpdateChecker(
     private val repository: PluginRepository,

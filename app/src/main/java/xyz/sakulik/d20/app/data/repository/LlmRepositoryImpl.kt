@@ -27,7 +27,7 @@ import xyz.sakulik.d20.app.util.StreamingNarrativeExtractor
 import java.io.IOException
 
 /**
- * LlmRepository 的具体实现类 (BYOK 模式)
+ * LlmRepository 的自带密钥模式实现
  * 实现逻辑：通过 OkHttp SSE 实时解析 narrative 片段
  */
 class LlmRepositoryImpl(

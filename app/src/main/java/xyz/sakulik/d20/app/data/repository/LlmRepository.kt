@@ -16,7 +16,7 @@ interface LlmRepository {
     fun chatStream(baseUrl: String, messages: List<ChatMessage>): Flow<StreamState>
 
     /**
-     * 通用文本流 (不带 JSON 协议拦截)
+     * 不带 JSON 协议拦截的通用文本流
      */
     fun chatRaw(baseUrl: String, messages: List<ChatMessage>): Flow<String>
 

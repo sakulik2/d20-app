@@ -36,7 +36,7 @@ class SensoryController private constructor(context: Context) {
     private val sounds = mutableMapOf<String, Int>()
 
     init {
-        // 性能优化：将音效预加载移至后台线程，避免阻塞主线程 (Binder 延迟)
+        // 将音效预加载移至后台线程，避免 Binder 延迟阻塞主线程。
         Thread {
             loadSound(context, "dice_clatter", "dice_clatter")
             loadSound(context, "success_fanfare", "success_fanfare")
@@ -64,7 +64,7 @@ class SensoryController private constructor(context: Context) {
     }
 
     /**
-     * 骰子落地点重击震动 (Land Impact Vibration)
+     * 骰子落地点重击震动
      */
     fun hapticLandImpact() {
         stopVibration()

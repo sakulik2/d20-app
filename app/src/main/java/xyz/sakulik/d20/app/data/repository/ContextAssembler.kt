@@ -18,7 +18,7 @@ import xyz.sakulik.d20.app.domain.worldview.LEGACY_WORLDVIEW_PROMPT_PENDING
 import xyz.sakulik.d20.app.domain.worldview.WorldviewProvider
 
 /**
- * AI 上下文组装器 (三明治结构)
+ * 使用三明治结构的 AI 上下文组装器
  * 负责组装 System Prompt, 角色状态, 以及历史消息
  */
 class ContextAssembler(
@@ -35,7 +35,7 @@ class ContextAssembler(
      * 为大模型组装完整的对话上下文
      * @param userText 用户当前输入的文本
      * @param campaignId 当前所属剧本 ID
-     * @param contextLimit 携带的最近完整对话回合上限 (若空则默认从 keyManager 获取)
+     * @param contextLimit 携带的最近完整对话回合上限；为空时从 keyManager 获取
      */
     suspend fun buildConversation(
         userText: String, 
@@ -160,8 +160,8 @@ class ContextAssembler(
         
         val gameRulesGuidance = """
             <TRPG_MECHANICS_STRICT_RULES>
-            你是一个严谨公正的 TRPG 跑团主持人（GM / DM / KP）。必须绝对遵循以下规则：
-            1. 【严禁包办代替】当玩家尝试任何包含风险、战斗攻击、闪避防御、调查、施法、潜行、说服等行为时，你【必须 (MUST)】在 game_events 中输出 `require_roll` 检定需求，等待玩家掷骰结果！【严禁】直接在剧情描述中替玩家擅自判定成功或失败！
+            你是一个严谨公正的 TRPG 跑团主持人。必须绝对遵循以下规则：
+            1. 【严禁包办代替】当玩家尝试任何包含风险、战斗攻击、闪避防御、调查、施法、潜行、说服等行为时，你必须在 game_events 中输出 `require_roll` 检定需求，等待玩家掷骰结果！【严禁】直接在剧情描述中替玩家擅自判定成功或失败！
                - D&D 例子：{"type":"require_roll","action_id":"dnd_check","expression":"1d20","threshold":12,"stat_id":"dex","reason":"敏捷（闪避）"}
                - D&D 攻击：{"type":"require_roll","action_id":"dnd_attack","expression":"1d20","target_id":"goblin_1","reason":"攻击地精"}；`target_id` 必须来自最近一次 `start_combat`，武器由玩家从本地已装备档案选择。
                - D&D 施法：{"type":"require_roll","action_id":"dnd_cast","expression":"1d20","target_id":"goblin_1","reason":"施放法术"}；法术、环级、攻击/豁免/自动生效类型由玩家本地已准备法术档案决定，禁止编造伤害式或法术位。
@@ -179,7 +179,7 @@ class ContextAssembler(
 
         val outputFormat = """
             <OUTPUT_FORMAT>
-            你必须以 JSON（json）格式返回一个完整的顶层响应对象，且顶层只能包含以下字段：
+            你必须以 JSON 格式返回一个完整的顶层响应对象，且顶层只能包含以下字段：
             - narrative: (String) 故事的叙事描述，使用 Markdown 格式（如使用 *倾斜* 表示动作，**加粗** 表示强调）。
               注意：回复必须控制在 150 字以内，确保叙事精炼有力，不要包含废话。
             - game_events: (Array) 只允许 `require_roll`、`start_combat` 和无规则修正的叙事 `add_item`。
@@ -252,7 +252,7 @@ class ContextAssembler(
         } else {
             userText
         }
-        val textWithGuard = "$baseUserText\n\n(注意：必须且只能输出包含 narrative 和 game_events 字段的合法 JSON（json）对象)"
+        val textWithGuard = "$baseUserText\n\n注意：必须且只能输出包含 narrative 和 game_events 字段的合法 JSON 对象。"
         messages.add(ChatMessage(role = "user", content = textWithGuard))
 
         return messages

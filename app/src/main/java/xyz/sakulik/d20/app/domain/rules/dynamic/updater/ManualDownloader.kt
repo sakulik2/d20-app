@@ -24,7 +24,7 @@ sealed class DownloadState {
 }
 
 /**
- * 通用插件下载器 (Ruleset & Worldview)
+ * 规则包与设定集的通用插件下载器
  */
 class ManualDownloader(private val repository: PluginRepository) {
 

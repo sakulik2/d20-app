@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import xyz.sakulik.d20.app.domain.rules.SystemMetadata
 
 /**
- * 模块 2：规则集选择组件 (Grid 布局)
+ * 模块 2：网格式规则集选择组件
  */
 @Composable
 fun SystemSelector(

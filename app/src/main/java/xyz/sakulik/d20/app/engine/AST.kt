@@ -1,7 +1,7 @@
 package xyz.sakulik.d20.app.engine
 
 /**
- * 抽象语法树（AST）节点基类
+ * 抽象语法树节点基类
  */
 sealed class ExpressionNode
 
@@ -12,8 +12,8 @@ data class NumberNode(val value: Int) : ExpressionNode()
 
 /**
  * 骰子节点，例如 "2d20kh1"
- * @param count 骰子数量节点 (ExpressionNode 以支持像 (1+1)d20 这样的语法)
- * @param sides 骰子面数节点 (ExpressionNode 以支持像 1d(10+10) 这样的语法)
+ * @param count 骰子数量表达式节点，支持 (1+1)d20 这样的语法
+ * @param sides 骰子面数表达式节点，支持 1d(10+10) 这样的语法
  * @param modifiers 骰子修饰符列表，如 kh1, kl1, dh1, dl1
  */
 data class DiceNode(

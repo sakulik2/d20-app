@@ -19,7 +19,7 @@ import kotlin.random.Random
 fun BackgroundNoiseLayer(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.fillMaxSize()) {
         // 使用非常细小的噪点逻辑，这里用随机矩形点模拟
-        // 在生产环境中，建议使用 Shader (RuntimeShader) 实现高性能噪声
+        // 在生产环境中，建议使用 RuntimeShader 实现高性能噪声。
         drawIntoCanvas { _ ->
             // 简单的随机散点模拟质感
             repeat(100) {

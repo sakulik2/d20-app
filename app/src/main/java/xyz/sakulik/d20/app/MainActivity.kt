@@ -15,6 +15,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import xyz.sakulik.d20.app.data.local.AppDatabase
 import xyz.sakulik.d20.app.data.repository.ContextAssembler
 import xyz.sakulik.d20.app.data.repository.InventoryRepository
@@ -149,7 +151,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- 初始化设置 (API Key & 规则选择) ---
+                        // --- 初始化设置：API Key 与规则选择 ---
                         composable("setup") {
                             val vm: SetupViewModel = viewModel(factory = viewModelFactory {
                                 SetupViewModel(this@MainActivity, keyManager, campaignDao)
@@ -157,7 +159,9 @@ class MainActivity : ComponentActivity() {
                             SetupScreen(
                                 viewModel = vm,
                                 onNavigateToWorldBuilder = { cid, rid ->
-                                    navController.navigate("worldbuilder/$cid/$rid")
+                                    navController.navigate(
+                                        "worldbuilder/$cid/$rid?discardOnExit=true"
+                                    )
                                 },
                                 onNavigateToSettings = {
                                     navController.navigate("settings")
@@ -166,9 +170,21 @@ class MainActivity : ComponentActivity() {
                         }
 
                         // --- 世界观构建 ---
-                        composable("worldbuilder/{campaignId}/{rulesetId}") { backStack ->
+                        composable(
+                            route = "worldbuilder/{campaignId}/{rulesetId}" +
+                                "?discardOnExit={discardOnExit}",
+                            arguments = listOf(
+                                navArgument("discardOnExit") {
+                                    type = NavType.BoolType
+                                    defaultValue = false
+                                }
+                            )
+                        ) { backStack ->
                             val cid = backStack.arguments?.getString("campaignId") ?: ""
                             val rid = backStack.arguments?.getString("rulesetId") ?: "coc_7e"
+                            val discardOnExit = backStack.arguments
+                                ?.getBoolean("discardOnExit")
+                                ?: false
                             val vm: WorldBuilderViewModel = viewModel(factory = viewModelFactory {
                                 WorldBuilderViewModel(
                                     applicationContext,
@@ -188,6 +204,7 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToMarket = {
                                     navController.navigate("worldview_market")
                                 },
+                                onExit = { vm.exit(cid, discardOnExit) },
                                 onBack = { navController.popBackStack() }
                             )
                         }

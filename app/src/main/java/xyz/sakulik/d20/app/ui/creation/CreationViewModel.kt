@@ -278,7 +278,7 @@ class CreationViewModel(
             }
         }
         
-        // 2. 针对已知规则系统的核心属性重掷 (D&D 5e / CoC 7e)
+        // 2. 针对 D&D 5e 与 CoC 7e 的核心属性重掷
         android.util.Log.d("CreationVM", "Rerolling for $rid")
         val lowerRid = rid.lowercase()
         when {
@@ -486,7 +486,7 @@ class CreationViewModel(
     }
 
     /**
-     * 属性调整逻辑 (Legacy Adapter)
+     * 兼容旧规则包的属性调整逻辑
      */
     fun updateStat(statName: String, delta: Int) {
         val currentState = uiState.value
@@ -495,7 +495,7 @@ class CreationViewModel(
     }
 
     /**
-     * 手动输入数值 (Legacy Adapter)
+     * 兼容旧规则包的手动数值输入
      */
     fun setStatValue(statName: String, newValue: Int) {
         updateField(statName, newValue)
