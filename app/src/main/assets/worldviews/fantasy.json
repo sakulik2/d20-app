@@ -1,6 +1,7 @@
 {
     "id": "fantasy",
     "name": "边境诸国",
+    "defaultWorldName": "边境诸国",
     "author": "System",
     "version": "1.0",
     "compatibleRulesets": ["dnd_5e"],

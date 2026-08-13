@@ -128,6 +128,7 @@ fun WorldBuilderScreen(
                     onValueChange = { viewModel.onWorldNameChange(it) },
                     label = { Text("世界名称") },
                     placeholder = { Text("例如：灰港群岛、阿卡姆调查") },
+                    supportingText = { Text("选择设定集时会带入默认名称，仍可自由修改") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )

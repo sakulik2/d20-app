@@ -8,6 +8,7 @@ const val LEGACY_WORLDVIEW_PROMPT_PENDING = "__legacy_worldview_prompt_pending__
 data class WorldviewManifest(
     val id: String,
     val name: String,
+    val defaultWorldName: String = "",
     val author: String = "System",
     val version: String = "1.0.0",
     val compatibleRulesets: List<String> = listOf("any"),

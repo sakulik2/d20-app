@@ -27,6 +27,7 @@ object WorldviewProvider {
         return isSafePluginId(manifest.id) &&
             manifest.name.isNotBlank() &&
             manifest.name.length <= MAX_NAME_LENGTH &&
+            manifest.defaultWorldName.length <= MAX_NAME_LENGTH &&
             isSupportedPluginVersion(manifest.version) &&
             manifest.compatibleRulesets.isNotEmpty() &&
             manifest.compatibleRulesets.all { rulesetId ->
@@ -39,6 +40,7 @@ object WorldviewProvider {
             manifest.customRules.length <= MAX_CUSTOM_RULES_LENGTH &&
             listOf(
                 manifest.name,
+                manifest.defaultWorldName,
                 manifest.tone,
                 manifest.coreSetting,
                 manifest.systemPromptPayload,

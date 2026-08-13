@@ -1,6 +1,7 @@
 {
     "id": "cthulhu_mythos",
     "name": "克苏鲁迷雾",
+    "defaultWorldName": "地球",
     "author": "System",
     "version": "1.0",
     "compatibleRulesets": ["coc_7e"],

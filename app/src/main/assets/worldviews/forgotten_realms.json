@@ -1,6 +1,7 @@
 {
     "id": "forgotten_realms",
     "name": "被遗忘的国度",
+    "defaultWorldName": "费伦",
     "author": "Ed Greenwood",
     "version": "1.0",
     "compatibleRulesets": ["dnd_5e"],

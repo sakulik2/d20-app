@@ -1,6 +1,7 @@
 {
     "id": "eberron",
     "name": "艾伯伦: 魔法工业",
+    "defaultWorldName": "艾伯伦",
     "author": "Keith Baker",
     "version": "1.0",
     "compatibleRulesets": ["dnd_5e"],

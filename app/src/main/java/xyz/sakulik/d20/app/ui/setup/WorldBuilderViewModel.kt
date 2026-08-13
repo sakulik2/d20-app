@@ -155,6 +155,7 @@ class WorldBuilderViewModel(
 
     fun applyPreset(preset: WorldviewManifest) {
         updateState { it.copy(
+            worldName = preset.defaultWorldName.ifBlank { it.worldName },
             selectedWorldviewId = preset.id,
             selectedTone = preset.tone,
             coreSetting = preset.coreSetting,
