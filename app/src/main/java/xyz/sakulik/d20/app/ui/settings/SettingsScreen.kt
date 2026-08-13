@@ -168,6 +168,61 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                    var reasoningExpanded by remember { mutableStateOf(false) }
+                    val reasoningOptions = listOf(
+                        "AUTO" to "自动（模型默认）",
+                        "LOW" to "快速",
+                        "MEDIUM" to "平衡",
+                        "HIGH" to "深入"
+                    )
+                    val reasoningLabel = reasoningOptions
+                        .find { it.first == uiState.reasoningEffort }
+                        ?.second
+                        ?: reasoningOptions.first().second
+
+                    ExposedDropdownMenuBox(
+                        expanded = reasoningExpanded,
+                        onExpandedChange = { reasoningExpanded = !reasoningExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = reasoningLabel,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("思考强度") },
+                            supportingText = {
+                                Text("快速档优先缩短等待；实际档位受模型能力限制。")
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = reasoningExpanded
+                                )
+                            },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = reasoningExpanded,
+                            onDismissRequest = { reasoningExpanded = false }
+                        ) {
+                            reasoningOptions.forEach { (key, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        viewModel.onReasoningEffortChange(key)
+                                        reasoningExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        "应用会按当前协议映射 OpenAI reasoning.effort、Anthropic output_config.effort 和 DeepSeek reasoning_effort；自动档不覆盖模型默认值。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
                 }
             }
 

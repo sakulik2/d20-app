@@ -321,17 +321,17 @@ class MainViewModel(
     private suspend fun sendActionInternal(
         text: String,
         retryCount: Int = 0,
-        protocolCorrection: String? = null
+        protocolCorrection: String? = null,
+        retryConversation: List<xyz.sakulik.d20.app.data.model.ChatMessage>? = null
     ) {
         val cid = campaignId
-        val baseConversation = contextAssembler.buildConversation(text, cid)
-        val conversation = if (protocolCorrection == null) {
-            baseConversation
-        } else {
-            baseConversation.dropLast(1) + xyz.sakulik.d20.app.data.model.ChatMessage(
+        val conversation = if (protocolCorrection != null && retryConversation != null) {
+            retryConversation + xyz.sakulik.d20.app.data.model.ChatMessage(
                 role = "user",
-                content = "上一条响应未通过客户端协议验证：$protocolCorrection。请重新返回完整 JSON；不要解释，不要复用无效事件。"
+                content = "上一条响应未通过客户端协议验证：$protocolCorrection。请基于此前完全相同的用户输入、检定结果和权威状态重新返回完整 JSON；不要解释，不要复用无效事件。"
             )
+        } else {
+            contextAssembler.buildConversation(text, cid)
         }
 
         if (text.isNotEmpty()) {
@@ -348,6 +348,9 @@ class MainViewModel(
                 is StreamState.TextChunk -> {
                     updateState { it.copy(streamingNarrative = it.streamingNarrative + state.delta) }
                 }
+                is StreamState.PreviewReplacement -> {
+                    updateState { it.copy(streamingNarrative = state.narrative) }
+                }
                 is StreamState.Completed -> {
                     val authorization = authorizeGameEvents(state.response.gameEvents)
                     if (authorization is GameEventAuthorizationResult.Rejected) {
@@ -356,7 +359,8 @@ class MainViewModel(
                             sendActionInternal(
                                 text = "",
                                 retryCount = retryCount + 1,
-                                protocolCorrection = authorization.message
+                                protocolCorrection = authorization.message,
+                                retryConversation = conversation
                             )
                         } else {
                             sendEvent(MainUiEvent.Error("模型事件未获规则授权：${authorization.message}"))
@@ -381,7 +385,8 @@ class MainViewModel(
                         sendActionInternal(
                             text = "",
                             retryCount = retryCount + 1,
-                            protocolCorrection = state.throwable.message ?: "JSON 结构无效"
+                            protocolCorrection = state.throwable.message ?: "JSON 结构无效",
+                            retryConversation = conversation
                         )
                     } else {
                         val errMsg = state.throwable.message ?: "Network Error"

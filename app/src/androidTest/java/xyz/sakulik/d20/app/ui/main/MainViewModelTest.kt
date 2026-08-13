@@ -305,6 +305,8 @@ class MainViewModelTest {
         override fun getApiProtocol(): String = "CHAT_COMPLETIONS"
         override fun saveMaxHistoryTurns(turns: Int) = Unit
         override fun getMaxHistoryTurns(): Int = 8
+        override fun getReasoningEffort(): String = "AUTO"
+        override fun saveReasoningEffort(effort: String) = Unit
     }
 
     private companion object {

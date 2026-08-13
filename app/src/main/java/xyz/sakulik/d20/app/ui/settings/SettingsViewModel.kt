@@ -4,6 +4,7 @@ import xyz.sakulik.d20.app.BuildConfig
 import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 import xyz.sakulik.d20.app.data.security.ApiProtocol
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
+import xyz.sakulik.d20.app.data.security.ReasoningEffort
 import xyz.sakulik.d20.app.ui.base.BaseViewModel
 import xyz.sakulik.d20.app.ui.base.UiEvent
 import xyz.sakulik.d20.app.ui.base.UiState
@@ -13,6 +14,7 @@ data class SettingsUiState(
     val baseUrl: String = "",
     val model: String = "",
     val apiProtocol: String = "DEFAULT",
+    val reasoningEffort: String = ReasoningEffort.AUTO.name,
     val maxHistoryTurns: Int = ConversationMemoryPolicy.DEFAULT_RECENT_TURNS,
     val isPasswordVisible: Boolean = false,
     val isSaved: Boolean = false,
@@ -33,6 +35,7 @@ class SettingsViewModel(
             baseUrl = keyManager.getBaseUrl(),
             model = keyManager.getModel(),
             apiProtocol = keyManager.getApiProtocol(),
+            reasoningEffort = keyManager.getReasoningEffort(),
             maxHistoryTurns = keyManager.getMaxHistoryTurns()
         ) }
     }
@@ -51,6 +54,16 @@ class SettingsViewModel(
 
     fun onApiProtocolChange(newProtocol: String) {
         updateState { it.copy(apiProtocol = newProtocol, isSaved = false, error = null) }
+    }
+
+    fun onReasoningEffortChange(newEffort: String) {
+        updateState {
+            it.copy(
+                reasoningEffort = ReasoningEffort.fromStored(newEffort).name,
+                isSaved = false,
+                error = null
+            )
+        }
     }
 
     fun onMaxHistoryTurnsChange(newTurns: Int) {
@@ -97,12 +110,15 @@ class SettingsViewModel(
         keyManager.saveModel(model)
         keyManager.saveApiProtocol(selectedProtocol.name)
         keyManager.saveMaxHistoryTurns(state.maxHistoryTurns)
+        val reasoningEffort = ReasoningEffort.fromStored(state.reasoningEffort)
+        keyManager.saveReasoningEffort(reasoningEffort.name)
         updateState {
             it.copy(
                 apiKey = apiKey,
                 baseUrl = baseUrl,
                 model = model,
                 apiProtocol = selectedProtocol.name,
+                reasoningEffort = reasoningEffort.name,
                 isSaved = true,
                 error = null
             )

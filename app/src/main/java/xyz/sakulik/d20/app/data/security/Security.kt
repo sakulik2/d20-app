@@ -12,6 +12,26 @@ enum class ApiProtocol {
     CHAT_COMPLETIONS
 }
 
+enum class ReasoningEffort {
+    AUTO,
+    LOW,
+    MEDIUM,
+    HIGH;
+
+    fun promptGuidance(): String = when (this) {
+        AUTO -> ""
+        LOW -> "优先快速响应；只做完成当前回合所需的最少推理，不展开无关分析。"
+        MEDIUM -> "在响应速度与规则可靠性之间保持平衡；检查关键约束后直接作答。"
+        HIGH -> "优先完整性；仔细核对叙事连续性、规则约束和事件字段，但不要输出思考过程。"
+    }
+
+    companion object {
+        fun fromStored(value: String?): ReasoningEffort = entries.firstOrNull {
+            it.name == value
+        } ?: AUTO
+    }
+}
+
 /**
  * LLM 密钥管理器接口
  */
@@ -30,6 +50,8 @@ interface LlmKeyManager {
     fun getApiProtocol(): String
     fun saveMaxHistoryTurns(turns: Int)
     fun getMaxHistoryTurns(): Int
+    fun saveReasoningEffort(effort: String)
+    fun getReasoningEffort(): String
 }
 
 /**
@@ -56,6 +78,7 @@ class EncryptedLlmKeyManager(context: Context) : LlmKeyManager {
         private const val KEY_MODEL = "model"
         private const val KEY_API_PROTOCOL = "api_protocol"
         private const val KEY_MAX_HISTORY_TURNS = "max_history_turns"
+        private const val KEY_REASONING_EFFORT = "reasoning_effort"
         private const val DEFAULT_BASE_URL = "https://api.openai.com"
         private const val DEFAULT_MODEL = "gpt-5.5"
     }
@@ -135,5 +158,17 @@ class EncryptedLlmKeyManager(context: Context) : LlmKeyManager {
             ConversationMemoryPolicy.DEFAULT_RECENT_TURNS
         )
         return ConversationMemoryPolicy.sanitizeRecentTurns(saved)
+    }
+
+    override fun saveReasoningEffort(effort: String) {
+        sharedPreferences.edit()
+            .putString(KEY_REASONING_EFFORT, ReasoningEffort.fromStored(effort).name)
+            .apply()
+    }
+
+    override fun getReasoningEffort(): String {
+        return ReasoningEffort.fromStored(
+            sharedPreferences.getString(KEY_REASONING_EFFORT, ReasoningEffort.AUTO.name)
+        ).name
     }
 }

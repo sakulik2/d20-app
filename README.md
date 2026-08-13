@@ -39,6 +39,8 @@ app/src/androidTest/   Room、Compose 和设备测试
 
 在设置中填写 `https://api.deepseek.com`、模型 `deepseek-chat`、自己的 API Key，并将协议保持为“默认”或选择“OpenAI Chat Completions”。新建存档后发送一个无需检定的动作，例如“环顾房间并描述眼前景象”：正常结果应显示一段叙事且不报 JSON 格式错误。随后发送一个有风险的动作，例如“撬开上锁的箱子”：正常结果应打开本地掷骰面板，提交结果后继续叙事。客户端会为 DeepSeek 使用 `response_format={"type":"json_object"}`，拒绝截断或无效事件，并在格式错误时自动重试一次。
 
+主对话会在结构化 JSON 尚未结束时增量提取 `narrative` 作为临时预览；`game_events` 仍只在完整响应通过严格解析与本地授权后执行。设置页的思考强度支持自动、快速、平衡和深入：应用分别映射 OpenAI `reasoning.effort` / `reasoning_effort`、Anthropic `output_config.effort` 与 DeepSeek `thinking` + `reasoning_effort`，未知兼容端点只使用提示约束，避免发送不受支持的厂商字段。
+
 聊天原文仍完整保存在 Room 中。发送给模型时，应用按“最近完整回合 + 较早对话本地提取式摘要 + 相关世界书”组装上下文；隐藏的本地判定消息不会进入记忆。近期原文默认保留 16 个完整回合，可在设置中调整为 8–48 回合，其字符预算随轮数同步增长；较早摘要最多约 8,000 字符，世界书最多召回 6 条、约 6,000 字符。当前检索是无需网络和 embedding 的确定性关键词排序，不是向量数据库 RAG。
 
 Debug/Dev 构建会用 Logcat 标签 `LlmTraffic` 分段记录最终协议、去除查询参数与用户信息后的请求 URL、完整 JSON 请求正文和模型返回正文，便于排查兼容端点。日志不读取请求 Header，因此不会记录 `Authorization`、`x-api-key` 或本地 API Key；但提示词、用户输入、角色信息和模型输出仍属于敏感内容，提交日志前必须脱敏。Release 构建不输出这些正文日志。

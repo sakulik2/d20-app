@@ -20,8 +20,10 @@ import okio.Buffer
 import xyz.sakulik.d20.app.data.model.*
 import xyz.sakulik.d20.app.data.security.ApiProtocol
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
+import xyz.sakulik.d20.app.data.security.ReasoningEffort
 import xyz.sakulik.d20.app.util.Either
 import xyz.sakulik.d20.app.util.LlmJsonBuffer
+import xyz.sakulik.d20.app.util.StreamingNarrativeExtractor
 import java.io.IOException
 
 /**
@@ -112,7 +114,8 @@ class LlmRepositoryImpl(
         protocol: ApiProtocol,
         stream: Boolean,
         structuredOutputMode: StructuredOutputMode = StructuredOutputMode.NONE,
-        outputSpec: StructuredOutputSpec = TURN_OUTPUT_SPEC
+        outputSpec: StructuredOutputSpec = TURN_OUTPUT_SPEC,
+        suppressReasoning: Boolean = false
     ): Request {
         if (!BuildConfig.DEBUG) {
             val uri = runCatching { java.net.URI(baseUrl.trim()) }.getOrNull()
@@ -122,13 +125,16 @@ class LlmRepositoryImpl(
         }
         val request = when (protocol) {
             ApiProtocol.ANTHROPIC -> buildAnthropicRequest(
-                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec,
+                suppressReasoning
             )
             ApiProtocol.RESPONSES -> buildResponsesRequest(
-                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec,
+                suppressReasoning
             )
             else -> buildChatCompletionsRequest(
-                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec
+                baseUrl, apiKey, model, messages, stream, structuredOutputMode, outputSpec,
+                suppressReasoning
             )
         }
         logLlmRequest(protocol, request)
@@ -217,6 +223,29 @@ class LlmRepositoryImpl(
         baseUrl.contains("deepseek", ignoreCase = true) ||
             model.startsWith("deepseek", ignoreCase = true)
 
+    private fun configuredReasoningEffort(): ReasoningEffort {
+        return ReasoningEffort.fromStored(keyManager.getReasoningEffort())
+    }
+
+    private fun standardEffortValue(suppressReasoning: Boolean = false): String? = when {
+        suppressReasoning -> null
+        else -> when (configuredReasoningEffort()) {
+            ReasoningEffort.AUTO -> null
+            ReasoningEffort.LOW -> "low"
+            ReasoningEffort.MEDIUM -> "medium"
+            ReasoningEffort.HIGH -> "high"
+        }
+    }
+
+    private fun deepSeekEffortValue(suppressReasoning: Boolean = false): String? = when {
+        suppressReasoning -> null
+        else -> when (configuredReasoningEffort()) {
+            ReasoningEffort.AUTO -> null
+            ReasoningEffort.LOW -> "low"
+            ReasoningEffort.MEDIUM, ReasoningEffort.HIGH -> "high"
+        }
+    }
+
     override fun chatStream(baseUrl: String, messages: List<ChatMessage>): Flow<StreamState> = callbackFlow {
         val apiKey = keyManager.getKey()
         if (apiKey.isNullOrBlank()) {
@@ -239,7 +268,8 @@ class LlmRepositoryImpl(
                 baseUrl,
                 protocol,
                 model
-            )
+            ),
+            allowReasoning: Boolean = true
         ) {
             if (!this@callbackFlow.isActive) return
             val request = try {
@@ -250,7 +280,8 @@ class LlmRepositoryImpl(
                     messages,
                     protocol,
                     stream = true,
-                    structuredOutputMode = structuredOutputMode
+                    structuredOutputMode = structuredOutputMode,
+                    suppressReasoning = !allowReasoning
                 )
             } catch (exception: Exception) {
                 trySend(StreamState.Error(exception))
@@ -259,6 +290,7 @@ class LlmRepositoryImpl(
             }
 
             val fullContentBuffer = StringBuilder()
+            var emittedNarrative = ""
             var streamCompleted = false
             var streamFailure: String? = null
 
@@ -285,6 +317,21 @@ class LlmRepositoryImpl(
                                 logWarning("LlmRepo", "Protocol $protocol returned HTTP ${response.code}: $errorBody")
                                 val fallbackMode = structuredOutputMode.fallbackMode(protocol)
                                 if (
+                                    allowReasoning &&
+                                    configuredReasoningEffort() != ReasoningEffort.AUTO &&
+                                    response.code in REASONING_FALLBACK_CODES
+                                ) {
+                                    logInfo(
+                                        "LlmRepo",
+                                        "Reasoning controls unsupported -> retrying without override"
+                                    )
+                                    executeStream(
+                                        protocol,
+                                        structuredOutputMode,
+                                        allowReasoning = false
+                                    )
+                                    return
+                                } else if (
                                     fallbackMode != null &&
                                     response.code in STRUCTURED_OUTPUT_FALLBACK_CODES
                                 ) {
@@ -292,7 +339,11 @@ class LlmRepositoryImpl(
                                         "LlmRepo",
                                         "Structured output $structuredOutputMode unsupported -> retrying with $fallbackMode"
                                     )
-                                    executeStream(protocol, structuredOutputMode = fallbackMode)
+                                    executeStream(
+                                        protocol,
+                                        structuredOutputMode = fallbackMode,
+                                        allowReasoning = allowReasoning
+                                    )
                                     return
                                 } else if (canFallback(protocol, response.code)) {
                                     logInfo("LlmRepo", "Fallback triggered -> Retrying with /v1/chat/completions")
@@ -302,7 +353,8 @@ class LlmRepositoryImpl(
                                             baseUrl,
                                             ApiProtocol.CHAT_COMPLETIONS,
                                             model
-                                        )
+                                        ),
+                                        allowReasoning = allowReasoning
                                     )
                                     return
                                 } else {
@@ -322,6 +374,20 @@ class LlmRepositoryImpl(
                                     val chunk = parseStreamChunk(protocol, line)
                                     if (chunk.delta.isNotEmpty()) {
                                         fullContentBuffer.append(chunk.delta)
+                                        val preview = StreamingNarrativeExtractor.extract(
+                                            fullContentBuffer.toString()
+                                        )
+                                        if (
+                                            preview.length > emittedNarrative.length &&
+                                            preview.startsWith(emittedNarrative)
+                                        ) {
+                                            trySend(
+                                                StreamState.TextChunk(
+                                                    preview.substring(emittedNarrative.length)
+                                                )
+                                            )
+                                            emittedNarrative = preview
+                                        }
                                     }
                                     if (chunk.completed) streamCompleted = true
                                     if (chunk.failure != null) {
@@ -350,7 +416,15 @@ class LlmRepositoryImpl(
 
                             when (result) {
                                 is Either.Right -> {
-                                    trySend(StreamState.TextChunk(result.value.narrative))
+                                    if (result.value.narrative.startsWith(emittedNarrative)) {
+                                        val remaining = result.value.narrative
+                                            .substring(emittedNarrative.length)
+                                        if (remaining.isNotEmpty()) {
+                                            trySend(StreamState.TextChunk(remaining))
+                                        }
+                                    } else {
+                                        trySend(StreamState.PreviewReplacement(result.value.narrative))
+                                    }
                                     trySend(StreamState.Completed(result.value))
                                     close()
                                 }
@@ -390,7 +464,8 @@ class LlmRepositoryImpl(
         messages: List<ChatMessage>,
         stream: Boolean,
         structuredOutputMode: StructuredOutputMode,
-        outputSpec: StructuredOutputSpec
+        outputSpec: StructuredOutputSpec,
+        suppressReasoning: Boolean
     ): Request {
         val responseFormat = when (structuredOutputMode) {
             StructuredOutputMode.JSON_SCHEMA -> ResponseFormat(
@@ -424,6 +499,22 @@ class LlmRepositoryImpl(
                 outputSpec.outputTokenLimit
             } else {
                 null
+            },
+            thinking = if (isDeepSeek(baseUrl, model) && !suppressReasoning) {
+                configuredReasoningEffort()
+                    .takeUnless { it == ReasoningEffort.AUTO }
+                    ?.let {
+                        xyz.sakulik.d20.app.data.model.ThinkingConfig(
+                            type = "enabled"
+                        )
+                    }
+            } else {
+                null
+            },
+            reasoningEffort = when {
+                isDeepSeek(baseUrl, model) -> deepSeekEffortValue(suppressReasoning)
+                isOpenAiEndpoint(baseUrl) -> standardEffortValue(suppressReasoning)
+                else -> null
             }
         )
         return Request.Builder()
@@ -444,7 +535,8 @@ class LlmRepositoryImpl(
         messages: List<ChatMessage>,
         stream: Boolean,
         structuredOutputMode: StructuredOutputMode,
-        outputSpec: StructuredOutputSpec
+        outputSpec: StructuredOutputSpec,
+        suppressReasoning: Boolean
     ): Request {
         val outputFormat = if (structuredOutputMode == StructuredOutputMode.JSON_SCHEMA) {
             AnthropicOutputFormat(type = "json_schema", schema = outputSpec.schema)
@@ -456,7 +548,12 @@ class LlmRepositoryImpl(
             messages = messages,
             stream = stream,
             outputFormat = outputFormat,
-            maxTokens = outputSpec.outputTokenLimit
+            maxTokens = outputSpec.outputTokenLimit,
+            effort = if (isDeepSeek(baseUrl, model)) {
+                deepSeekEffortValue(suppressReasoning)
+            } else {
+                standardEffortValue(suppressReasoning)
+            }
         )
         return Request.Builder()
             .url(buildEndpoint(baseUrl, "v1/messages"))
@@ -475,12 +572,20 @@ class LlmRepositoryImpl(
         messages: List<ChatMessage>,
         stream: Boolean,
         structuredOutputMode: StructuredOutputMode,
-        outputSpec: StructuredOutputSpec
+        outputSpec: StructuredOutputSpec,
+        suppressReasoning: Boolean
     ): Request {
         val requestBody = ResponsesRequest(
             model = model,
             input = messages,
             stream = stream,
+            reasoning = when {
+                isDeepSeek(baseUrl, model) -> deepSeekEffortValue(suppressReasoning)
+                isOpenAiEndpoint(baseUrl) -> standardEffortValue(suppressReasoning)
+                else -> null
+            }?.let { effort ->
+                xyz.sakulik.d20.app.data.model.ResponsesReasoningConfig(effort)
+            },
             text = if (structuredOutputMode == StructuredOutputMode.JSON_SCHEMA) {
                 ResponsesTextConfig(
                     format = ResponsesTextFormat(
@@ -660,7 +765,15 @@ class LlmRepositoryImpl(
         val model = keyManager.getModel()
         val protocol = determineProtocol(baseUrl)
         val request = try {
-            buildProtocolRequest(baseUrl, apiKey, model, messages, protocol, stream = true)
+            buildProtocolRequest(
+                baseUrl,
+                apiKey,
+                model,
+                messages,
+                protocol,
+                stream = true,
+                suppressReasoning = true
+            )
         } catch (exception: Exception) {
             trySend("错误: ${exception.message ?: "API 地址或请求配置无效"}")
             close()
@@ -796,7 +909,8 @@ class LlmRepositoryImpl(
                     protocol,
                     stream = false,
                     structuredOutputMode = structuredOutputMode,
-                    outputSpec = CHARACTER_OUTPUT_SPEC
+                    outputSpec = CHARACTER_OUTPUT_SPEC,
+                    suppressReasoning = true
                 )
             } catch (exception: Exception) {
                 trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(exception))
@@ -900,6 +1014,7 @@ class LlmRepositoryImpl(
             outputTokenLimit = CHARACTER_OUTPUT_TOKEN_LIMIT
         )
         val STRUCTURED_OUTPUT_FALLBACK_CODES = setOf(400, 404, 405, 415, 422)
+        val REASONING_FALLBACK_CODES = setOf(400, 422)
         val CHAT_SUCCESS_FINISH_REASONS = setOf("stop")
         val ANTHROPIC_SUCCESS_STOP_REASONS = setOf("end_turn", "stop_sequence", "tool_use")
         val RESPONSES_FAILURE_EVENTS = setOf("response.incomplete", "response.failed", "error")
@@ -918,7 +1033,8 @@ internal object AnthropicMessagesAdapter {
         messages: List<ChatMessage>,
         stream: Boolean,
         outputFormat: AnthropicOutputFormat?,
-        maxTokens: Int = 4_096
+        maxTokens: Int = 4_096,
+        effort: String? = null
     ): AnthropicRequest {
         val systemPrompt = messages.filter { it.role == "system" }
             .joinToString("\n\n") { it.content }
@@ -930,7 +1046,14 @@ internal object AnthropicMessagesAdapter {
             system = systemPrompt.ifBlank { null },
             maxTokens = maxTokens,
             stream = stream,
-            outputConfig = outputFormat?.let(::AnthropicOutputConfig)
+            outputConfig = if (outputFormat != null || effort != null) {
+                AnthropicOutputConfig(
+                    format = outputFormat,
+                    effort = effort
+                )
+            } else {
+                null
+            }
         )
     }
 

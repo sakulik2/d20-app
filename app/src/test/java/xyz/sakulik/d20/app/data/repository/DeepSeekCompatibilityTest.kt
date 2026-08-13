@@ -70,6 +70,11 @@ class DeepSeekCompatibilityTest {
         )
         assertEquals(4096, request.getValue("max_tokens").jsonPrimitive.content.toInt())
         assertFalse(request.containsKey("max_completion_tokens"))
+        assertEquals(
+            "enabled",
+            request.getValue("thinking").jsonObject.getValue("type").jsonPrimitive.content,
+        )
+        assertEquals("low", request.getValue("reasoning_effort").jsonPrimitive.content)
         assertTrue(
             request.getValue("messages").jsonArray.any { message ->
                 message.jsonObject.getValue("content").jsonPrimitive.content
@@ -151,6 +156,7 @@ class DeepSeekCompatibilityTest {
         override fun getThemeStyle(): String = "AUTO"
         override fun getApiProtocol(): String = ApiProtocol.DEFAULT.name
         override fun getMaxHistoryTurns(): Int = 8
+        override fun getReasoningEffort(): String = "LOW"
         override fun saveKey(key: String) = Unit
         override fun clearKey() = Unit
         override fun saveBaseUrl(url: String) = Unit
@@ -158,6 +164,7 @@ class DeepSeekCompatibilityTest {
         override fun saveThemeStyle(style: String) = Unit
         override fun saveApiProtocol(protocol: String) = Unit
         override fun saveMaxHistoryTurns(turns: Int) = Unit
+        override fun saveReasoningEffort(effort: String) = Unit
     }
 
     private companion object {

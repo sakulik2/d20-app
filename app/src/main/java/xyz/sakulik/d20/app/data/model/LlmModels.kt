@@ -22,7 +22,15 @@ data class ChatRequest(
     @SerialName("max_tokens")
     val maxTokens: Int? = null,
     @SerialName("max_completion_tokens")
-    val maxCompletionTokens: Int? = null
+    val maxCompletionTokens: Int? = null,
+    val thinking: ThinkingConfig? = null,
+    @SerialName("reasoning_effort")
+    val reasoningEffort: String? = null
+)
+
+@Serializable
+data class ThinkingConfig(
+    val type: String
 )
 
 @Serializable
@@ -83,7 +91,8 @@ data class AnthropicRequest(
 
 @Serializable
 data class AnthropicOutputConfig(
-    val format: AnthropicOutputFormat
+    val format: AnthropicOutputFormat? = null,
+    val effort: String? = null
 )
 
 @Serializable
@@ -124,9 +133,15 @@ data class ResponsesRequest(
     val input: List<ChatMessage>,
     val stream: Boolean,
     val temperature: Double? = null,
+    val reasoning: ResponsesReasoningConfig? = null,
     val text: ResponsesTextConfig? = null,
     @SerialName("max_output_tokens")
     val maxOutputTokens: Int? = null
+)
+
+@Serializable
+data class ResponsesReasoningConfig(
+    val effort: String
 )
 
 @Serializable
@@ -156,6 +171,8 @@ data class ResponsesChunk(
 sealed class StreamState {
     /** 叙事文本片段 */
     data class TextChunk(val delta: String) : StreamState()
+    /** 以最终规范叙事替换不一致的临时预览 */
+    data class PreviewReplacement(val narrative: String) : StreamState()
     /** 完整解析并通过结构校验的模型回合 */
     data class Completed(val response: AIResponse) : StreamState()
     /** 错误状态 */

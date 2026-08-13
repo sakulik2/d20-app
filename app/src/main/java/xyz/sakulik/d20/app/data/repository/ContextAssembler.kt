@@ -9,6 +9,7 @@ import xyz.sakulik.d20.app.data.local.LoreEntryEntity
 import xyz.sakulik.d20.app.data.local.CombatantDao
 import xyz.sakulik.d20.app.data.local.CombatSessionDao
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
+import xyz.sakulik.d20.app.data.security.ReasoningEffort
 import xyz.sakulik.d20.app.data.model.ChatMessage
 import xyz.sakulik.d20.app.data.model.ConversationMemoryPolicy
 import xyz.sakulik.d20.app.domain.rules.RulesetRegistry
@@ -178,19 +179,38 @@ class ContextAssembler(
 
         val outputFormat = """
             <OUTPUT_FORMAT>
-            你必须以 JSON（json）格式返回响应，包含以下字段：
+            你必须以 JSON（json）格式返回一个完整的顶层响应对象，且顶层只能包含以下字段：
             - narrative: (String) 故事的叙事描述，使用 Markdown 格式（如使用 *倾斜* 表示动作，**加粗** 表示强调）。
               注意：回复必须控制在 150 字以内，确保叙事精炼有力，不要包含废话。
             - game_events: (Array) 只允许 `require_roll`、`start_combat` 和无规则修正的叙事 `add_item`。
-              - {"type":"require_roll","action_id":"dnd_check","expression":"1d20","threshold":10,"stat_id":"str","reason":"力量检定"}
-              - {"type":"start_combat","combatants":[{"id":"opponent_1","name":"对手","profile_id":"${ruleset.combatRules.encounterProfiles.keys.firstOrNull() ?: "当前规则包没有可用档案"}"}]}
-              - {"type":"add_item","name":"染血的信件","description":"一封沾有暗红血迹的旧信","category":"线索","modifiers":{}}
+            事件对象绝不能单独作为顶层响应；它只能放在 `game_events` 数组中。完整响应示例：
+            - 无事件：{"narrative":"雨声敲打窗沿，房间里暂时没有异动。","game_events":[]}
+            - 请求检定：{"narrative":"门轴锈死，需要用力推开。","game_events":[{"type":"require_roll","action_id":"dnd_check","expression":"1d20","threshold":10,"stat_id":"str","reason":"力量检定"}]}
+            - 开始战斗：{"narrative":"阴影中的对手拔出武器。","game_events":[{"type":"start_combat","combatants":[{"id":"opponent_1","name":"对手","profile_id":"${ruleset.combatRules.encounterProfiles.keys.firstOrNull() ?: "当前规则包没有可用档案"}"}]}]}
+            - 添加叙事物品：{"narrative":"你拾起落在地上的旧信。","game_events":[{"type":"add_item","name":"染血的信件","description":"一封沾有暗红血迹的旧信","category":"线索","modifiers":{}}]}
             </OUTPUT_FORMAT>
             注意：基于随机种子进行多样化叙事，不要重复之前的描述。
             请直接返回 JSON 对象，不要包含代码块标记或任何多余解释。
         """.trimIndent()
+
+        val reasoningGuidance = keyManager
+            ?.getReasoningEffort()
+            ?.let(ReasoningEffort::fromStored)
+            ?.promptGuidance()
+            .orEmpty()
+            .takeIf { it.isNotBlank() }
+            ?.let { guidance ->
+                "<REASONING_GUIDANCE>$guidance</REASONING_GUIDANCE>\n\n"
+            }
+            .orEmpty()
         
-        messages.add(ChatMessage(role = "system", content = worldSetting + "\n\n" + gameRulesGuidance + "\n\n" + ruleset.getLlmContext() + "\n\n" + outputFormat))
+        messages.add(
+            ChatMessage(
+                role = "system",
+                content = worldSetting + "\n\n" + reasoningGuidance + gameRulesGuidance +
+                    "\n\n" + ruleset.getLlmContext() + "\n\n" + outputFormat
+            )
+        )
 
         // 5. 注入角色状态与环境 (第二层 System Message)
         val statsString = character.stats.entries.joinToString(", ") { "${it.key}: ${it.value}" }

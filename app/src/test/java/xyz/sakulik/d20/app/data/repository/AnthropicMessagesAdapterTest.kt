@@ -16,6 +16,7 @@ import xyz.sakulik.d20.app.data.model.AnthropicOutputFormat
 import xyz.sakulik.d20.app.data.model.AnthropicRequest
 import xyz.sakulik.d20.app.data.model.ChatMessage
 import xyz.sakulik.d20.app.data.model.ResponsesRequest
+import xyz.sakulik.d20.app.data.model.ResponsesReasoningConfig
 
 class AnthropicMessagesAdapterTest {
     private val json = Json {
@@ -37,7 +38,8 @@ class AnthropicMessagesAdapterTest {
             outputFormat = AnthropicOutputFormat(
                 type = "json_schema",
                 schema = AiResponseSchema.value
-            )
+            ),
+            effort = "medium"
         )
 
         val encoded = json.encodeToString(AnthropicRequest.serializer(), request)
@@ -54,6 +56,10 @@ class AnthropicMessagesAdapterTest {
             .getValue("format").jsonObject
         assertEquals("json_schema", format.getValue("type").jsonPrimitive.content)
         assertEquals(AiResponseSchema.value, format.getValue("schema"))
+        assertEquals(
+            "medium",
+            root.getValue("output_config").jsonObject.getValue("effort").jsonPrimitive.content
+        )
         assertEquals(4096, root.getValue("max_tokens").jsonPrimitive.content.toInt())
         assertTrue(root.getValue("stream").jsonPrimitive.content.toBoolean())
         assertFalse(root.containsKey("response_format"))
@@ -116,7 +122,8 @@ class AnthropicMessagesAdapterTest {
         val request = ResponsesRequest(
             model = "gpt-5.5",
             input = listOf(ChatMessage("user", "继续")),
-            stream = true
+            stream = true,
+            reasoning = ResponsesReasoningConfig("high")
         )
 
         val root = json.parseToJsonElement(
@@ -124,5 +131,9 @@ class AnthropicMessagesAdapterTest {
         ).jsonObject
 
         assertTrue(root.getValue("stream").jsonPrimitive.content.toBoolean())
+        assertEquals(
+            "high",
+            root.getValue("reasoning").jsonObject.getValue("effort").jsonPrimitive.content
+        )
     }
 }
