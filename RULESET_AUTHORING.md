@@ -100,7 +100,38 @@ app/src/main/assets/rulesets/my_system.json
 
 也可复制 `app/src/main/assets/rulesets/example_ruleset.json` 后修改。
 
-## 4. 检定与 AST
+## 4. 快捷行动
+
+规则包可用根字段 `quickActions` 向聊天输入框旁的统一菜单提供动作。客户端只支持三种声明式类型，不允许规则包注入任意代码或客户端命令：
+
+- `NARRATIVE`：将 `payload` 作为玩家行动发送给主持模型，适合观察、调查、交谈等常用行为。
+- `LOCAL_RULE`：将 `payload` 作为 `actionId` 调用当前规则包 AST；该 ID 必须出现在某个 `switch` 节点的 `cases` 中，否则整个规则包校验失败。
+- `END_TURN`：调用客户端已有的通用战斗推进；必须使用 `availability: "PLAYER_TURN"` 且 `payload` 留空。
+
+`availability` 可为 `ALWAYS`、`OUT_OF_COMBAT`、`IN_COMBAT` 或 `PLAYER_TURN`。单包最多声明 20 个动作，ID、显示文案和负载均有长度与安全格式限制。例如：
+
+```json
+"quickActions": [
+  {
+    "id": "observe",
+    "label": "观察周围",
+    "description": "寻找异常细节",
+    "kind": "NARRATIVE",
+    "payload": "我谨慎观察周围，寻找异常细节和潜在危险。"
+  },
+  {
+    "id": "recover",
+    "label": "恢复",
+    "kind": "LOCAL_RULE",
+    "availability": "OUT_OF_COMBAT",
+    "payload": "my_recover_action"
+  }
+]
+```
+
+装备和法术查询由客户端统一读取当前存档物品，不需要规则包重复声明。特定系统的休息、恢复或其他特殊行为应只在对应规则包 JSON 及其 AST 中定义，主界面不会按规则包 ID 硬编码。
+
+## 5. 检定与 AST
 
 `checkRules` 支持：
 
@@ -110,11 +141,13 @@ app/src/main/assets/rulesets/my_system.json
 - `equipmentBonusActionIds`: 允许使用通用装备整数加值的动作；建议显式填写。
 - `allowedDiceExpressions`: 按 `action_id` 声明 LLM 可请求的完整骰式白名单；必须包含 `defaultActionId`。仅接受至多 100 枚、至多 10000 面的简单骰式，以及可选的 `kh1`、`kl1` 和整数加减值，例如 `1d20`、`2d20kh1`、`1d100+10`。
 
-AST 节点类型为 `roll`、`switch`、`condition`、`math`、`effect`、`rest`、`consume_resource`、`death_save`、`targeted_attack`。数值来源使用 `constant:<值>`、`variable:<变量>`、`stat:<属性键>`、`intent:<参数>`。数学运算符为 `+ - * /`；条件支持数值 `>= > <= < == !=`，字符串只支持 `== !=`。流水线必须以明确的 `ResultState` 结束：`SUCCESS`、`FAILURE`、`CRITICAL_SUCCESS`、`CRITICAL_FAILURE`、`REGULAR_SUCCESS`、`HARD_SUCCESS` 或 `EXTREME_SUCCESS`。
+AST 节点类型为 `roll`、`switch`、`condition`、`math`、`effect`、`recover`、`consume_resource`、`death_save`、`targeted_attack`。数值来源使用 `constant:<值>`、`variable:<变量>`、`stat:<属性键>`、`intent:<参数>`。数学运算符为 `+ - * /`；条件支持数值 `>= > <= < == !=`，字符串只支持 `== !=`。流水线必须以明确的 `ResultState` 结束：`SUCCESS`、`FAILURE`、`CRITICAL_SUCCESS`、`CRITICAL_FAILURE`、`REGULAR_SUCCESS`、`HARD_SUCCESS` 或 `EXTREME_SUCCESS`。
+
+`recover` 是通用恢复节点：`copyValues` 将一个角色字段复制到另一个字段，`setValues` 写入声明的固定值，`taggedResourceKeys` 指定要解析的 JSON 资源字段，`resetTags` 指定资源对象的 `reset_on` 标签。核心不解释具体标签含义，规则包可以自行定义恢复语义。
 
 一个 `DiceSubmission` 只能被一个掷骰节点消费。需要两阶段或多次掷骰的自定义系统，目前应拆成多个 `require_roll` 动作，或新增受信任本地处理器。
 
-## 5. 战斗与多目标
+## 6. 战斗与多目标
 
 `combatRules` 可声明 `initiative`、`turnResources`、`turnResourceLabels`、`actionCosts`、`actionTimings`、`primaryActionResource`、`lifePolicy`、`localActionHandler` 和 `defeatAtZeroHp`。`actionTimings` 只接受 `ANY`、`PARTICIPANT_TURN`。
 
@@ -133,7 +166,7 @@ D&D 本地武器/法术档案支持以下目标模式：
 
 受信任的内置法术档案还可使用 `effect_name`、`effect_timing`、`effect_operation`、`effect_amount`、`effect_duration`、`effect_stack_policy` 和 `effect_stack_key` 声明固定持续效果。时机仅接受 `TURN_START/TURN_END`，操作仅接受 `DAMAGE/HEAL`，堆叠策略为 `REPLACE/REFRESH/STACK`。这些字段由应用本地白名单处理器解释；远程包不能携带脚本或任意执行代码。
 
-## 6. 远程发布
+## 7. 远程发布
 
 远程索引是 `RemotePluginIndex`：
 
@@ -155,7 +188,7 @@ D&D 本地武器/法术档案支持以下目标模式：
 
 SHA-256 只能证明内容与索引一致，不能在索引源本身被篡改时证明发布者身份。生产发布仍应为索引增加开发者私钥签名，并在客户端内置公钥验证；完成签名校验前，不要将固定索引交给不受控制的第三方托管。
 
-## 7. 验证清单
+## 8. 验证清单
 
 1. 用 JSON 工具确认语法，并确保文件名等于 `id`。
 2. 调用 `RulesetProvider.parseManifestDetailed(json)`；逐项处理返回的 `RuleError`。

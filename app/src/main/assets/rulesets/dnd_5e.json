@@ -3,6 +3,14 @@
     "name": "龙与地下城 5E",
     "description": "最伟大的奇幻冒险。经典 d20 规则体系。",
     "version": "1.1.0",
+    "quickActions": [
+        {"id":"observe","label":"观察周围","description":"留意环境、出口和异常细节","kind":"NARRATIVE","payload":"我谨慎观察周围环境，重点留意出口、危险和反常细节。"},
+        {"id":"investigate","label":"调查线索","description":"仔细检查当前最可疑的目标","kind":"NARRATIVE","payload":"我仔细调查当前最可疑的目标，寻找能推进局面的线索。"},
+        {"id":"talk","label":"与人交谈","description":"主动询问附近可交流的角色","kind":"NARRATIVE","payload":"我主动与附近最合适的角色交谈，询问与当前目标有关的信息。"},
+        {"id":"short_rest","label":"短休","description":"在非战斗状态恢复短休资源","kind":"LOCAL_RULE","availability":"OUT_OF_COMBAT","payload":"dnd_short_rest"},
+        {"id":"long_rest","label":"长休","description":"在非战斗状态恢复生命和休息资源","kind":"LOCAL_RULE","availability":"OUT_OF_COMBAT","payload":"dnd_long_rest"},
+        {"id":"end_turn","label":"结束回合","description":"结束玩家当前战斗回合","kind":"END_TURN","availability":"PLAYER_TURN"}
+    ],
     "checkRules": {
         "targetSource": "EVENT",
     "modifierSource": "ABILITY_MODIFIER",
@@ -304,9 +312,25 @@
                 "type": "switch",
                 "variable": "intent:actionId",
                 "cases": {
-                    "dnd_death_save": "death_save_trigger"
+                    "dnd_death_save": "death_save_trigger",
+                    "dnd_short_rest": "short_rest",
+                    "dnd_long_rest": "long_rest"
                 },
                 "defaultNodeId": "check_roll_state"
+            },
+            "short_rest": {
+                "type": "recover",
+                "taggedResourceKeys": ["resources"],
+                "resetTags": ["short_rest"],
+                "nextNodeId": "set_success"
+            },
+            "long_rest": {
+                "type": "recover",
+                "copyValues": {"hp": "max_hp"},
+                "setValues": {"deathSaves": "{\"successes\":0,\"failures\":0,\"isStable\":false}"},
+                "taggedResourceKeys": ["resources", "hit_dice"],
+                "resetTags": ["short_rest", "long_rest"],
+                "nextNodeId": "set_success"
             },
             "death_save_trigger": {
                 "type": "death_save",

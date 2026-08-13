@@ -8,7 +8,10 @@ import xyz.sakulik.d20.app.domain.worldview.WorldviewManifest
 import xyz.sakulik.d20.app.domain.worldview.WorldviewProvider
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -33,10 +36,45 @@ data class RulesetManifest(
     val uiBlueprint: UiBlueprint,
     val creationSchema: CreationSchema? = null,
     val worldviewPresets: List<WorldviewManifest> = emptyList(),
+    val quickActions: List<QuickActionDefinition> = emptyList(),
     val checkRules: CheckRules = CheckRules(),
     val combatRules: CombatRules = CombatRules(),
     val mechanicsPipeline: MechanicsPipeline
 )
+
+@Serializable
+data class QuickActionDefinition(
+    val id: String,
+    val label: String,
+    val description: String = "",
+    val kind: QuickActionKind,
+    val availability: QuickActionAvailability = QuickActionAvailability.ALWAYS,
+    val payload: String = ""
+)
+
+@Serializable
+enum class QuickActionKind {
+    NARRATIVE,
+    LOCAL_RULE,
+    END_TURN
+}
+
+@Serializable
+enum class QuickActionAvailability {
+    ALWAYS,
+    OUT_OF_COMBAT,
+    IN_COMBAT,
+    PLAYER_TURN
+}
+
+fun QuickActionDefinition.isAvailable(combatActive: Boolean, isPlayerTurn: Boolean): Boolean {
+    return when (availability) {
+        QuickActionAvailability.ALWAYS -> true
+        QuickActionAvailability.OUT_OF_COMBAT -> !combatActive
+        QuickActionAvailability.IN_COMBAT -> combatActive
+        QuickActionAvailability.PLAYER_TURN -> combatActive && isPlayerTurn
+    }
+}
 
 @Serializable
 data class CheckRules(
@@ -215,14 +253,12 @@ data class DeathSaveNode(
 ) : LogicNode()
 
 @Serializable
-@SerialName("rest")
-data class RestNode(
-    val restType: String, // "SHORT", "LONG"
-    val hitDiceKey: String = "hit_dice",
-    val curHpKey: String = "hp",
-    val maxHpKey: String = "max_hp",
+@SerialName("recover")
+data class RecoveryNode(
+    val copyValues: Map<String, String> = emptyMap(),
+    val setValues: Map<String, String> = emptyMap(),
+    val taggedResourceKeys: List<String> = emptyList(),
     val resetTags: List<String> = emptyList(),
-    val deathSavesKey: String = "deathSaves",
     override val nextNodeId: String? = null
 ) : LogicNode()
 
@@ -329,6 +365,7 @@ interface IRuleset {
     val version: String
     val creationSchema: CreationSchema?
     val worldviewPresets: List<WorldviewManifest>
+    val quickActions: List<QuickActionDefinition>
     val checkRules: CheckRules
     val combatRules: CombatRules
     fun getLlmContext(): String
@@ -344,6 +381,7 @@ class DynamicRulesetImpl(private val manifest: RulesetManifest) : IRuleset {
     override val version: String = manifest.version
     override val creationSchema: CreationSchema? = manifest.creationSchema
     override val worldviewPresets: List<WorldviewManifest> = manifest.worldviewPresets
+    override val quickActions: List<QuickActionDefinition> = manifest.quickActions
     override val checkRules: CheckRules = manifest.checkRules
     override val combatRules: CombatRules = manifest.combatRules
 
@@ -629,29 +667,24 @@ class DynamicRulesetImpl(private val manifest: RulesetManifest) : IRuleset {
                     }
                 }
 
-                is RestNode -> {
-                    val maxHp = modifiedCharacter[node.maxHpKey].toString().toFloatOrNull() ?: 10f
-                    
-                    if (node.restType == "LONG") {
-                        modifiedCharacter[node.curHpKey] = maxHp.toInt().toString()
-                        modifiedCharacter[node.deathSavesKey] = "{\"successes\":0,\"failures\":0,\"isStable\":false}"
-                        
-                        // 深度重置：将所有 "current": X 替换为同级别的 "max": Y
-                        var resourcesJson = modifiedCharacter["resources"]?.toString() ?: "{}"
-                        // 极简实现：匹配每个资源项并对齐 current 与 max
-                        val resetRegex = Regex("\"(\\w+)\":\\s*\\{[^}]*\"current\":\\s*\\d+[^}]*\"max\":\\s*(\\d+)")
-                        resourcesJson = resetRegex.replace(resourcesJson) { matchResult ->
-                            val entry = matchResult.value
-                            val max = matchResult.groupValues[2]
-                            entry.replace(Regex("\"current\":\\d+"), "\"current\":$max")
+                is RecoveryNode -> {
+                    node.copyValues.forEach { (targetKey, sourceKey) ->
+                        modifiedCharacter[sourceKey]?.let { value ->
+                            modifiedCharacter[targetKey] = value
                         }
-                        modifiedCharacter["resources"] = resourcesJson
-                        
-                        logs.add("   长休完成：生命值全满，所有资源（法术位等）已根据最大值重置。")
-                        logs.add("[SYSTEM_REPORT: 角色完成长休。所有职业资源、法术位及健康状况已完全恢复。]")
-                    } else {
-                         logs.add("   短休完成。部分标记为 'short_rest' 的资源已重置。")
                     }
+                    node.setValues.forEach { (targetKey, value) ->
+                        modifiedCharacter[targetKey] = value
+                    }
+                    node.taggedResourceKeys.forEach { resourceKey ->
+                        modifiedCharacter[resourceKey]?.toString()?.let { resources ->
+                            modifiedCharacter[resourceKey] = resetTaggedResources(
+                                rawJson = resources,
+                                resetTags = node.resetTags
+                            )
+                        }
+                    }
+                    logs.add("   规则包声明的恢复效果已应用。")
                     currentNodeId = node.nextNodeId
                 }
                 
@@ -817,6 +850,24 @@ class DynamicRulesetImpl(private val manifest: RulesetManifest) : IRuleset {
         )
     }
 
+    private fun resetTaggedResources(rawJson: String, resetTags: List<String>): String {
+        val root = runCatching { Json.parseToJsonElement(rawJson) }.getOrNull() ?: return rawJson
+        val allowedTags = resetTags.mapTo(mutableSetOf()) { it.trim().lowercase() }
+
+        fun reset(element: JsonElement): JsonElement {
+            val objectValue = element as? JsonObject ?: return element
+            val resetTag = objectValue["reset_on"]?.jsonPrimitive?.contentOrNull?.lowercase()
+            val maxValue = objectValue["max"]?.jsonPrimitive?.intOrNull
+            val transformed = objectValue.mapValues { (_, child) -> reset(child) }.toMutableMap()
+            if (resetTag in allowedTags && maxValue != null && "current" in objectValue) {
+                transformed["current"] = JsonPrimitive(maxValue)
+            }
+            return JsonObject(transformed)
+        }
+
+        return reset(root).toString()
+    }
+
     /**
      * 高阶容错的数据源解析器
      */
@@ -950,7 +1001,7 @@ object RulesetProvider {
             subclass(DeathSaveNode::class)
             subclass(ConsumeResourceNode::class)
             subclass(TargetedAttackNode::class)
-            subclass(RestNode::class)
+            subclass(RecoveryNode::class)
             subclass(ConditionNode::class)
             subclass(MathNode::class)
             subclass(EffectNode::class)
@@ -1010,6 +1061,51 @@ object RulesetProvider {
             .eachCount()
             .filterValues { count -> count > 1 }
             .keys
+        val duplicateQuickActionIds = manifest.quickActions
+            .groupingBy(QuickActionDefinition::id)
+            .eachCount()
+            .filterValues { count -> count > 1 }
+            .keys
+        if (manifest.quickActions.size > 20) {
+            errors.add(
+                RuleError(
+                    code = "TOO_MANY_QUICK_ACTIONS",
+                    message = "规则包快捷行动不能超过 20 个"
+                )
+            )
+        }
+        if (duplicateQuickActionIds.isNotEmpty()) {
+            errors.add(
+                RuleError(
+                    code = "DUPLICATE_QUICK_ACTION",
+                    message = "规则包快捷行动 ID 重复：${duplicateQuickActionIds.sorted().joinToString()}"
+                )
+            )
+        }
+        manifest.quickActions.forEach { action ->
+            val payloadValid = when (action.kind) {
+                QuickActionKind.NARRATIVE -> action.payload.isNotBlank() && action.payload.length <= 500
+                QuickActionKind.LOCAL_RULE -> SAFE_RULE_ID.matches(action.payload) &&
+                    nodes.values.filterIsInstance<SwitchNode>().any { switch ->
+                        action.payload in switch.cases
+                    }
+                QuickActionKind.END_TURN -> action.payload.isBlank() &&
+                    action.availability == QuickActionAvailability.PLAYER_TURN
+            }
+            if (
+                !SAFE_RULE_ID.matches(action.id) ||
+                action.label.isBlank() || action.label.length > 40 ||
+                action.description.length > 160 ||
+                !payloadValid
+            ) {
+                errors.add(
+                    RuleError(
+                        code = "INVALID_QUICK_ACTION",
+                        message = "快捷行动 ${action.id} 的 ID、文案或负载无效"
+                    )
+                )
+            }
+        }
         if (duplicateWorldviewIds.isNotEmpty()) {
             errors.add(
                 RuleError(
@@ -1280,7 +1376,7 @@ object RulesetProvider {
                 hitNodeId?.let(references::add)
             }
             is RollNode,
-            is RestNode,
+            is RecoveryNode,
             is MathNode,
             is EffectNode -> Unit
         }

@@ -42,10 +42,17 @@ class RulesetAssetContractTest {
         assertEquals("ABILITY_MODIFIER", dnd.checkRules.modifierSource)
         assertEquals("DC", dnd.checkRules.targetLabel)
         assertEquals(20, dnd.combatRules.encounterProfiles.getValue("orc").hp)
+        assertEquals(
+            setOf("dnd_short_rest", "dnd_long_rest"),
+            dnd.quickActions
+                .filter { it.kind == QuickActionKind.LOCAL_RULE }
+                .mapTo(linkedSetOf()) { it.payload }
+        )
         assertEquals("coc_7e", coc.id)
         assertEquals("STAT_VALUE", coc.checkRules.targetSource)
         assertEquals("目标值", coc.checkRules.targetLabel)
         assertEquals(50, coc.combatRules.encounterProfiles.getValue("cultist").initiative)
+        assertTrue(coc.quickActions.none { it.kind == QuickActionKind.LOCAL_RULE })
     }
 
     @Test

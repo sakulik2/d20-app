@@ -869,6 +869,11 @@ class LlmRepositoryImpl(
     )
 
     private companion object {
+        const val LLM_TRAFFIC_TAG = "LlmTraffic"
+        const val LOGCAT_CHUNK_SIZE = 3_500
+        const val DEFAULT_OUTPUT_TOKEN_LIMIT = 4_096
+        const val CHARACTER_OUTPUT_TOKEN_LIMIT = 8_192
+
         val TURN_OUTPUT_SPEC = StructuredOutputSpec("trpg_turn_response", AiResponseSchema.value)
         val CHARACTER_OUTPUT_SPEC = StructuredOutputSpec(
             "trpg_character_response",
@@ -879,10 +884,6 @@ class LlmRepositoryImpl(
         val CHAT_SUCCESS_FINISH_REASONS = setOf("stop")
         val ANTHROPIC_SUCCESS_STOP_REASONS = setOf("end_turn", "stop_sequence", "tool_use")
         val RESPONSES_FAILURE_EVENTS = setOf("response.incomplete", "response.failed", "error")
-        const val LLM_TRAFFIC_TAG = "LlmTraffic"
-        const val LOGCAT_CHUNK_SIZE = 3_500
-        const val DEFAULT_OUTPUT_TOKEN_LIMIT = 4_096
-        const val CHARACTER_OUTPUT_TOKEN_LIMIT = 8_192
     }
 }
 

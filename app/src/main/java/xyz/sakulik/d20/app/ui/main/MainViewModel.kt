@@ -30,6 +30,9 @@ import xyz.sakulik.d20.app.data.repository.LlmRepository
 import xyz.sakulik.d20.app.data.security.LlmKeyManager
 import xyz.sakulik.d20.app.domain.rules.dynamic.CheckIntent
 import xyz.sakulik.d20.app.domain.rules.dynamic.DiceSubmission
+import xyz.sakulik.d20.app.domain.rules.dynamic.QuickActionDefinition
+import xyz.sakulik.d20.app.domain.rules.dynamic.QuickActionKind
+import xyz.sakulik.d20.app.domain.rules.dynamic.isAvailable
 import xyz.sakulik.d20.app.domain.combat.CombatState
 import xyz.sakulik.d20.app.domain.combat.CombatStateManager
 import xyz.sakulik.d20.app.domain.combat.EffectOperation
@@ -75,6 +78,7 @@ data class MainUiState(
     val streamingNarrative: String = "",
     val character: CharacterEntity? = null,
     val isLoading: Boolean = false,
+    val isQuickActionRunning: Boolean = false,
     val activeRulesetId: String = "coc_7e",
     val isDicePanelVisible: Boolean = false,
     val currentDiceIntent: CheckIntent? = null,
@@ -217,6 +221,98 @@ class MainViewModel(
         // 如果 text 为空，通常是自动生成的指令（续写/开场），允许通行
         viewModelScope.launch {
             sendActionInternal(text)
+        }
+    }
+
+    fun availableQuickActions(): List<QuickActionDefinition> {
+        val state = uiState.value
+        val ruleset = RulesetRegistry.getRuleset(context, state.activeRulesetId) ?: return emptyList()
+        val combat = state.combatState
+        return ruleset.quickActions.filter { action ->
+            action.isAvailable(
+                combatActive = combat?.isActive == true,
+                isPlayerTurn = combat?.isPlayerTurn == true
+            )
+        }
+    }
+
+    fun executeQuickAction(actionId: String) {
+        val state = uiState.value
+        if (state.isLoading || state.isQuickActionRunning || state.isDicePanelVisible) {
+            sendEvent(MainUiEvent.Error("请先完成当前响应或规则结算"))
+            return
+        }
+        val ruleset = RulesetRegistry.getRuleset(context, state.activeRulesetId)
+        val action = ruleset?.quickActions?.firstOrNull { it.id == actionId }
+        val combat = state.combatState
+        if (
+            action == null ||
+            !action.isAvailable(
+                combatActive = combat?.isActive == true,
+                isPlayerTurn = combat?.isPlayerTurn == true
+            )
+        ) {
+            sendEvent(MainUiEvent.Error("该快捷行动当前不可用"))
+            return
+        }
+
+        when (action.kind) {
+            QuickActionKind.NARRATIVE -> sendAction(action.payload)
+            QuickActionKind.LOCAL_RULE -> executeLocalQuickAction(action.id)
+            QuickActionKind.END_TURN -> nextCombatTurn()
+        }
+    }
+
+    private fun executeLocalQuickAction(actionId: String) {
+        updateState { it.copy(isQuickActionRunning = true) }
+        viewModelScope.launch {
+            try {
+                val character = uiState.value.character
+                val ruleset = character?.let { RulesetRegistry.getRuleset(context, it.activeSystem) }
+                if (character == null || ruleset == null) {
+                    sendEvent(MainUiEvent.Error("当前角色或规则包尚未加载"))
+                    return@launch
+                }
+                val action = ruleset.quickActions.firstOrNull { definition ->
+                    definition.id == actionId && definition.kind == QuickActionKind.LOCAL_RULE
+                }
+                if (action == null) {
+                    sendEvent(MainUiEvent.Error("该本地快捷行动不属于当前角色的规则包"))
+                    return@launch
+                }
+                val result = ruleset.executePipeline(
+                    CheckIntent(actionId = action.payload, meta = emptyMap()),
+                    character.stats
+                )
+                if (!result.isValid) {
+                    sendEvent(
+                        MainUiEvent.Error(
+                            result.errors.joinToString("；") { it.message }
+                                .ifBlank { "快捷行动未产生有效结果" }
+                        )
+                    )
+                    return@launch
+                }
+                val updatedCharacter = character.copy(
+                    stats = result.modifiedCharacterData.mapValues { (_, value) -> value.toString() }
+                )
+                characterDao.updateCharacter(updatedCharacter)
+                syncCharacterState(updatedCharacter)
+                messageDao.insertMessage(
+                    MessageEntity(
+                        campaignId = campaignId,
+                        role = "assistant",
+                        content = "> 【快捷行动】${action.label}已完成。"
+                    )
+                )
+                sensoryController?.hapticSoftTick()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                sendEvent(MainUiEvent.Error("快捷行动执行失败：${error.message ?: "未知错误"}"))
+            } finally {
+                updateState { it.copy(isQuickActionRunning = false) }
+            }
         }
     }
 

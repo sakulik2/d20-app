@@ -3,6 +3,10 @@
     "name": "极简示例规则包",
     "description": "通用轻量模版。提供基础 d20 检定机制。",
     "version": "1.1.0",
+    "quickActions": [
+        {"id":"observe","label":"观察周围","description":"寻找环境中的重要细节","kind":"NARRATIVE","payload":"我观察周围，寻找重要细节和潜在危险。"},
+        {"id":"end_turn","label":"结束回合","description":"结束玩家当前战斗回合","kind":"END_TURN","availability":"PLAYER_TURN"}
+    ],
     "checkRules": {
         "targetSource": "EVENT",
     "modifierSource": "EVENT",

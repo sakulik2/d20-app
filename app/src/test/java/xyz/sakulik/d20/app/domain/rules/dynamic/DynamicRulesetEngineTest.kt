@@ -14,6 +14,85 @@ import org.junit.Test
 class DynamicRulesetEngineTest {
 
     @Test
+    fun quickActionAvailabilityDoesNotDependOnRulesetId() {
+        val always = QuickActionDefinition("observe", "观察", kind = QuickActionKind.NARRATIVE, payload = "观察")
+        val rest = QuickActionDefinition(
+            "recover",
+            "恢复",
+            kind = QuickActionKind.LOCAL_RULE,
+            availability = QuickActionAvailability.OUT_OF_COMBAT,
+            payload = "recover"
+        )
+        val endTurn = QuickActionDefinition(
+            "end_turn",
+            "结束回合",
+            kind = QuickActionKind.END_TURN,
+            availability = QuickActionAvailability.PLAYER_TURN
+        )
+
+        assertTrue(always.isAvailable(combatActive = false, isPlayerTurn = false))
+        assertTrue(rest.isAvailable(combatActive = false, isPlayerTurn = false))
+        assertFalse(rest.isAvailable(combatActive = true, isPlayerTurn = true))
+        assertFalse(endTurn.isAvailable(combatActive = true, isPlayerTurn = false))
+        assertTrue(endTurn.isAvailable(combatActive = true, isPlayerTurn = true))
+    }
+
+    @Test
+    fun restNodeResetsOnlyResourcesDeclaredForThatRest() {
+        val ruleset = createRuleset(
+            entryNodeId = "branch",
+            nodes = mapOf(
+                "branch" to SwitchNode(
+                    variable = "intent:actionId",
+                    cases = mapOf(
+                        "short_rest" to "short",
+                        "long_rest" to "long"
+                    )
+                ),
+                "short" to RecoveryNode(
+                    taggedResourceKeys = listOf("resources"),
+                    resetTags = listOf("short_rest"),
+                    nextNodeId = "success"
+                ),
+                "long" to RecoveryNode(
+                    copyValues = mapOf("hp" to "max_hp"),
+                    taggedResourceKeys = listOf("resources"),
+                    resetTags = listOf("short_rest", "long_rest"),
+                    nextNodeId = "success"
+                ),
+                "success" to resultNode(ResultState.SUCCESS)
+            )
+        )
+        val character = mapOf<String, Any>(
+            "hp" to "2",
+            "max_hp" to "10",
+            "resources" to """{"short":{"current":0,"max":2,"reset_on":"short_rest"},"long":{"current":0,"max":3,"reset_on":"long_rest"}}"""
+        )
+
+        val shortRest = ruleset.executePipeline(
+            CheckIntent("short_rest", emptyMap()),
+            character
+        )
+        val shortResources = Json.parseToJsonElement(
+            shortRest.modifiedCharacterData.getValue("resources").toString()
+        ).jsonObject
+        assertEquals(2, shortResources.getValue("short").jsonObject.getValue("current").jsonPrimitive.int)
+        assertEquals(0, shortResources.getValue("long").jsonObject.getValue("current").jsonPrimitive.int)
+        assertEquals("2", shortRest.modifiedCharacterData["hp"])
+
+        val longRest = ruleset.executePipeline(
+            CheckIntent("long_rest", emptyMap()),
+            character
+        )
+        val longResources = Json.parseToJsonElement(
+            longRest.modifiedCharacterData.getValue("resources").toString()
+        ).jsonObject
+        assertEquals(2, longResources.getValue("short").jsonObject.getValue("current").jsonPrimitive.int)
+        assertEquals(3, longResources.getValue("long").jsonObject.getValue("current").jsonPrimitive.int)
+        assertEquals("10", longRest.modifiedCharacterData["hp"])
+    }
+
+    @Test
     fun textAndDropdownCreationFieldsAreOptionalUnlessDeclared() {
         assertFalse(StringInputField(id = "bio", label = "背景").required)
         assertFalse(
@@ -211,6 +290,34 @@ class DynamicRulesetEngineTest {
             ),
             errors.map { it.code }.toSet()
         )
+    }
+
+    @Test
+    fun manifestValidationRejectsLocalQuickActionWithoutAstBranch() {
+        val manifest = RulesetManifest(
+            id = "invalid_quick_action",
+            name = "Invalid Quick Action",
+            version = "1",
+            systemPromptInjection = SystemPromptInjection(""),
+            characterTemplate = CharacterTemplate(emptyMap()),
+            uiBlueprint = UiBlueprint("TEST", emptyMap()),
+            quickActions = listOf(
+                QuickActionDefinition(
+                    id = "recover",
+                    label = "恢复",
+                    kind = QuickActionKind.LOCAL_RULE,
+                    payload = "missing_recover_action"
+                )
+            ),
+            mechanicsPipeline = MechanicsPipeline(
+                entryNodeId = "result",
+                nodes = mapOf("result" to resultNode(ResultState.SUCCESS))
+            )
+        )
+
+        val errors = RulesetProvider.validateManifest(manifest)
+
+        assertTrue(errors.any { it.code == "INVALID_QUICK_ACTION" })
     }
 
     @Test

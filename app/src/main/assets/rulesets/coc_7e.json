@@ -3,6 +3,12 @@
     "name": "克苏鲁的呼唤 7E",
     "description": "探索未知的恐怖，百分骰 (d100) 理智规则。",
     "version": "1.1.0",
+    "quickActions": [
+        {"id":"observe","label":"观察现场","description":"确认环境、出口和异常痕迹","kind":"NARRATIVE","payload":"我谨慎观察现场，确认出口、异常痕迹和可能的危险。"},
+        {"id":"investigate","label":"调查线索","description":"仔细检查当前最值得怀疑的目标","kind":"NARRATIVE","payload":"我仔细调查当前最值得怀疑的目标，寻找可验证的线索。"},
+        {"id":"talk","label":"询问证人","description":"向附近可交流的人了解情况","kind":"NARRATIVE","payload":"我向附近最合适的证人询问与当前事件有关的情况。"},
+        {"id":"end_turn","label":"结束回合","description":"结束玩家当前战斗回合","kind":"END_TURN","availability":"PLAYER_TURN"}
+    ],
     "checkRules": {
         "targetSource": "STAT_VALUE",
     "modifierSource": "EVENT",

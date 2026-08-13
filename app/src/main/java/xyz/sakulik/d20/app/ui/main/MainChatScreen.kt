@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -125,6 +126,10 @@ fun MainChatScreen(
                         InputSection(
                             isLoading = uiState.isLoading,
                             canSubmitAction = true,
+                            inventory = uiState.inventory,
+                            quickActions = viewModel.availableQuickActions(),
+                            isQuickActionRunning = uiState.isQuickActionRunning,
+                            onQuickAction = viewModel::executeQuickAction,
                             onSend = { viewModel.sendAction(it) }
                         )
                     }
@@ -207,9 +212,14 @@ fun MainChatScreen(
 fun InputSection(
     isLoading: Boolean,
     canSubmitAction: Boolean = true,
+    inventory: List<xyz.sakulik.d20.app.data.local.ItemEntity> = emptyList(),
+    quickActions: List<xyz.sakulik.d20.app.domain.rules.dynamic.QuickActionDefinition> = emptyList(),
+    isQuickActionRunning: Boolean = false,
+    onQuickAction: (String) -> Unit = {},
     onSend: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
+    var showActionMenu by remember { mutableStateOf(false) }
     val isEnabled = !isLoading && canSubmitAction && text.isNotBlank()
 
     val containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
@@ -242,6 +252,17 @@ fun InputSection(
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(
+                onClick = { showActionMenu = true },
+                modifier = Modifier.size(42.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Bolt,
+                    contentDescription = "快捷行动与资料",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
             TextField(
                 value = text,
                 onValueChange = { text = it },
@@ -304,6 +325,19 @@ fun InputSection(
                 }
             }
         }
+    }
+
+    if (showActionMenu) {
+        QuickActionMenuSheet(
+            inventory = inventory,
+            quickActions = quickActions,
+            actionsEnabled = !isLoading && !isQuickActionRunning && canSubmitAction,
+            onQuickAction = { actionId ->
+                showActionMenu = false
+                onQuickAction(actionId)
+            },
+            onDismiss = { showActionMenu = false }
+        )
     }
 }
 
