@@ -131,7 +131,13 @@ class DeepSeekCompatibilityTest {
         )
         assertEquals(2, states.size)
         assertTrue(states.first() is CharacterGenState.Loading)
-        val success = states.last() as CharacterGenState.Success
+        val success = states.last().let { state ->
+            assertTrue(
+                "自动创卡重试应成功，实际状态：$state",
+                state is CharacterGenState.Success
+            )
+            state as CharacterGenState.Success
+        }
         assertEquals("凯伦", success.data.name)
         assertEquals(1, success.data.items.size)
         assertEquals("细剑", success.data.items.single().name)
@@ -169,7 +175,7 @@ class DeepSeekCompatibilityTest {
         """.trimIndent()
 
         val COMPLETE_CHARACTER_RESPONSE = """
-            {"choices":[{"message":{"role":"assistant","content":"{\"name\":\"凯伦\",\"stats\":{\"race\":\"精灵\",\"class\":\"吟游诗人\"},\"bio\":\"讥讽虚伪的流浪诗人。\",\"items\":[{\"name\":\"细剑\",\"description\":\"轻巧的穿刺武器\",\"category\":\"武器\",\"modifiers\":{\"damage_formula\":\"1d8\",\"damage_type\":\"piercing\",\"attack_ability\":\"FINESSE\"}}]}","reasoning_content":"","finish_reason":"stop"}]}
+            {"choices":[{"message":{"role":"assistant","content":"{\"name\":\"凯伦\",\"stats\":{\"race\":\"精灵\",\"class\":\"吟游诗人\"},\"bio\":\"讥讽虚伪的流浪诗人。\",\"items\":[{\"name\":\"细剑\",\"description\":\"轻巧的穿刺武器\",\"category\":\"武器\",\"modifiers\":{\"damage_formula\":\"1d8\",\"damage_type\":\"piercing\",\"attack_ability\":\"FINESSE\"}}]}","reasoning_content":""},"finish_reason":"stop"}]}
         """.trimIndent()
     }
 }
