@@ -210,7 +210,16 @@ class MainActivity : ComponentActivity() {
                         }
 
                         // --- 角色创建 ---
-                        composable("creation/{campaignId}/{rulesetId}") { backStack ->
+                        composable(
+                            route = "creation/{campaignId}/{rulesetId}",
+                            exitTransition = {
+                                if (targetState.arguments?.getBoolean("fromCreation") == true) {
+                                    androidx.compose.animation.ExitTransition.None
+                                } else {
+                                    null
+                                }
+                            }
+                        ) { backStack ->
                             val cid = backStack.arguments?.getString("campaignId") ?: ""
                             val rid = backStack.arguments?.getString("rulesetId") ?: "coc_7e"
                             val vm: CreationViewModel = viewModel(factory = viewModelFactory {
@@ -229,7 +238,7 @@ class MainActivity : ComponentActivity() {
                             CreationScreen(
                                 viewModel = vm,
                                 onSuccess = {
-                                    navController.navigate("chat/$cid") {
+                                    navController.navigate("chat/$cid?fromCreation=true") {
                                         popUpTo("archive") { inclusive = false }
                                     }
                                 }
@@ -238,13 +247,23 @@ class MainActivity : ComponentActivity() {
 
                         // --- 主聊天界面 ---
                         composable(
-                            route = "chat/{campaignId}",
+                            route = "chat/{campaignId}?fromCreation={fromCreation}",
+                            arguments = listOf(
+                                navArgument("fromCreation") {
+                                    type = NavType.BoolType
+                                    defaultValue = false
+                                }
+                            ),
                             enterTransition = {
-                                androidx.compose.animation.fadeIn(
-                                    animationSpec = androidx.compose.animation.core.tween(
-                                        400
+                                if (targetState.arguments?.getBoolean("fromCreation") == true) {
+                                    androidx.compose.animation.EnterTransition.None
+                                } else {
+                                    androidx.compose.animation.fadeIn(
+                                        animationSpec = androidx.compose.animation.core.tween(
+                                            400
+                                        )
                                     )
-                                )
+                                }
                             },
                             exitTransition = {
                                 androidx.compose.animation.fadeOut(
