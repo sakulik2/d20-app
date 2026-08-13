@@ -162,7 +162,25 @@ class LlmRepositoryImpl(
 
     private fun logTraffic(content: String) {
         content.ifEmpty { "<empty>" }.chunked(LOGCAT_CHUNK_SIZE).forEachIndexed { index, chunk ->
-            Log.d(LLM_TRAFFIC_TAG, "[${index + 1}] $chunk")
+            logDebug(LLM_TRAFFIC_TAG, "[${index + 1}] $chunk")
+        }
+    }
+
+    private fun logDebug(tag: String, message: String) {
+        runCatching { Log.d(tag, message) }
+    }
+
+    private fun logInfo(tag: String, message: String) {
+        runCatching { Log.i(tag, message) }
+    }
+
+    private fun logWarning(tag: String, message: String) {
+        runCatching { Log.w(tag, message) }
+    }
+
+    private fun logError(tag: String, message: String, throwable: Throwable? = null) {
+        runCatching {
+            if (throwable == null) Log.e(tag, message) else Log.e(tag, message, throwable)
         }
     }
 
@@ -210,7 +228,7 @@ class LlmRepositoryImpl(
         val model = keyManager.getModel()
         val primaryProtocol = determineProtocol(baseUrl)
 
-        runCatching { Log.d("LlmRepo", "Primary protocol selected: $primaryProtocol") }
+        logDebug("LlmRepo", "Primary protocol selected: $primaryProtocol")
 
         // 构造并发发请求逻辑，优先执行 primaryProtocol，如果遭遇 404/400/405 等错误，降级回退至 CHAT_COMPLETIONS
         var activeCall: Call? = null
@@ -264,20 +282,20 @@ class LlmRepositoryImpl(
                                     "HTTP ${response.code}",
                                     errorBody
                                 )
-                                Log.w("LlmRepo", "Protocol $protocol returned HTTP ${response.code}: $errorBody")
+                                logWarning("LlmRepo", "Protocol $protocol returned HTTP ${response.code}: $errorBody")
                                 val fallbackMode = structuredOutputMode.fallbackMode(protocol)
                                 if (
                                     fallbackMode != null &&
                                     response.code in STRUCTURED_OUTPUT_FALLBACK_CODES
                                 ) {
-                                    Log.i(
+                                    logInfo(
                                         "LlmRepo",
                                         "Structured output $structuredOutputMode unsupported -> retrying with $fallbackMode"
                                     )
                                     executeStream(protocol, structuredOutputMode = fallbackMode)
                                     return
                                 } else if (canFallback(protocol, response.code)) {
-                                    Log.i("LlmRepo", "Fallback triggered -> Retrying with /v1/chat/completions")
+                                    logInfo("LlmRepo", "Fallback triggered -> Retrying with /v1/chat/completions")
                                     executeStream(
                                         ApiProtocol.CHAT_COMPLETIONS,
                                         preferredStructuredOutputMode(
@@ -337,7 +355,7 @@ class LlmRepositoryImpl(
                                     close()
                                 }
                                 is Either.Left -> {
-                                    Log.e("LlmRepo", "Final structured response parse failed", result.value)
+                                    logError("LlmRepo", "Final structured response parse failed", result.value)
                                     trySend(
                                         StreamState.Error(
                                             LlmResponseFormatException(
@@ -351,7 +369,7 @@ class LlmRepositoryImpl(
                             }
                         } catch (exception: Exception) {
                             if (call.isCanceled() || !this@callbackFlow.isActive) return
-                            Log.e("LlmRepo", "Stream response failed", exception)
+                            logError("LlmRepo", "Stream response failed", exception)
                             trySend(StreamState.Error(exception))
                             close()
                         }
@@ -649,7 +667,7 @@ class LlmRepositoryImpl(
             return@callbackFlow
         }
 
-        Log.d("LlmRepo", "chatRaw protocol: $protocol, URL: ${request.safeLogUrl()}")
+        logDebug("LlmRepo", "chatRaw protocol: $protocol, URL: ${request.safeLogUrl()}")
 
         val call = client.newCall(request)
         call.enqueue(object : Callback {
@@ -704,7 +722,7 @@ class LlmRepositoryImpl(
                         close()
                     } catch (exception: Exception) {
                         if (call.isCanceled() || !this@callbackFlow.isActive) return
-                        Log.e("LlmRepo", "Raw stream response failed", exception)
+                        logError("LlmRepo", "Raw stream response failed", exception)
                         trySend("错误: ${exception.message ?: "读取模型响应失败"}")
                         close()
                     }
@@ -786,13 +804,13 @@ class LlmRepositoryImpl(
                 return
             }
 
-            Log.d("LlmRepo", "genChar protocol: $protocol, URL: ${request.safeLogUrl()}")
+            logDebug("LlmRepo", "genChar protocol: $protocol, URL: ${request.safeLogUrl()}")
             val call = client.newCall(request)
             activeCall = call
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
                     if (call.isCanceled() || !this@callbackFlow.isActive) return
-                    Log.e("LlmRepo", "genChar Failed", e)
+                    logError("LlmRepo", "genChar Failed", e)
                     trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(e))
                     close()
                 }
@@ -837,7 +855,7 @@ class LlmRepositoryImpl(
                                 execute(protocol, structuredOutputMode, formatRetryCount + 1)
                                 return
                             }
-                            Log.e("LlmRepo", "genChar Parse Error", e)
+                            logError("LlmRepo", "genChar Parse Error", e)
                             trySend(xyz.sakulik.d20.app.data.model.CharacterGenState.Error(e))
                             close()
                         }
